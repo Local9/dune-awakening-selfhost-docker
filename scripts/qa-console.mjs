@@ -2,6 +2,7 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { resolve } from "node:path";
 import { runBash } from "./lib/bash-runner.mjs";
+import { resolveQaFuncomToken } from "./lib/qa-token.mjs";
 import {
   CONSOLE_CONTAINER,
   CORE_STACK_CONTAINERS,
@@ -82,7 +83,7 @@ Usage:
   node scripts/qa-console.mjs wait-ready
 
 Environment:
-  DUNE_QA_FUNCOM_TOKEN     Required for up and wait-ready (no action if unset)
+  DUNE_QA_FUNCOM_TOKEN     Required for up and wait-ready (.env or env var; no action if unset)
   QA_PANEL_TIMEOUT_MS      Admin panel wait (default 120000)
   QA_STACK_TIMEOUT_MS      Core stack wait (default 600000)
   QA_READY_TIMEOUT_MS      dune ready wait (default 7200000)
@@ -202,11 +203,13 @@ function isSetupComplete() {
 }
 
 function requireQaFuncomToken() {
-  const token = String(process.env.DUNE_QA_FUNCOM_TOKEN || "").trim();
+  const token = resolveQaFuncomToken({ envPath: paths.env });
   if (!token) {
     console.error("DUNE_QA_FUNCOM_TOKEN is required. QA did not start any services.");
-    console.error("PowerShell: $env:DUNE_QA_FUNCOM_TOKEN = \"<your-funcom-token>\"");
-    console.error("bash:       export DUNE_QA_FUNCOM_TOKEN=\"<your-funcom-token>\"");
+    console.error("Set it in .env or the environment:");
+    console.error("  .env:       DUNE_QA_FUNCOM_TOKEN=<your-funcom-token>");
+    console.error("  PowerShell: $env:DUNE_QA_FUNCOM_TOKEN = \"<your-funcom-token>\"");
+    console.error("  bash:       export DUNE_QA_FUNCOM_TOKEN=\"<your-funcom-token>\"");
     process.exit(1);
   }
   return token;

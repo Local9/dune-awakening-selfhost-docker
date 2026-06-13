@@ -140,7 +140,7 @@ One command bootstraps missing setup (non-destructively), starts the real Dune s
 
 ```powershell
 # Windows PowerShell (Podman Desktop, Docker Desktop, or WSL2)
-$env:DUNE_QA_FUNCOM_TOKEN = "<your-funcom-token>"   # required for up / wait-ready
+# Set DUNE_QA_FUNCOM_TOKEN in .env or the environment (required for up / wait-ready)
 node scripts/qa-console.mjs up
 # open http://127.0.0.1:8088
 node scripts/qa-console.mjs wait-ready              # optional: wait for game readiness (can take hours on first install)
@@ -150,7 +150,7 @@ node scripts/qa-console.mjs down --all              # stops console + Dune stack
 
 ```bash
 # Linux / WSL2 / macOS
-export DUNE_QA_FUNCOM_TOKEN="<your-funcom-token>"   # required for up / wait-ready
+# Set DUNE_QA_FUNCOM_TOKEN in .env or export it (required for up / wait-ready)
 ./scripts/qa-console.sh up
 ./scripts/qa-console.sh wait-ready
 ./scripts/qa-console.sh check
@@ -164,7 +164,7 @@ export DUNE_QA_FUNCOM_TOKEN="<your-funcom-token>"   # required for up / wait-rea
 | `logs` / `logs --stack` | Console or core stack container logs |
 | `down` / `down --all` | Stop console, or console + stack |
 
-`up` and `wait-ready` require `DUNE_QA_FUNCOM_TOKEN` in the environment. If it is unset, the script exits immediately and does not touch Docker or local setup files.
+`up` and `wait-ready` require `DUNE_QA_FUNCOM_TOKEN` in `.env` or the environment (shell env var wins). If it is unset, the script exits immediately and does not touch Docker or local setup files.
 
 **Windows notes:** The game stack requires a Linux container host (Podman Machine or WSL2). Bash scripts run via WSL or Git Bash. Set `DUNE_QA_BASH` to your `bash.exe` if needed. The QA script sets `DUNE_CONTAINER_SOCKET` and `DUNE_HOST_REPO_ROOT` automatically for Podman/Docker.
 
