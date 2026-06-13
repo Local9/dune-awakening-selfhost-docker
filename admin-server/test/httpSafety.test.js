@@ -11,6 +11,17 @@ test("readJsonBody enforces request size limits", async () => {
   await assert.rejects(() => readJsonBody(Readable.from(["{\"too\":\"large\"}"]), 5), /exceeds 5 bytes/);
 });
 
+test("readJsonBody rejects invalid JSON with a client error", async () => {
+  await assert.rejects(async () => {
+    try {
+      await readJsonBody(Readable.from(["{bad json"]), 100);
+    } catch (error) {
+      assert.equal(error.statusCode, 400);
+      throw error;
+    }
+  }, /valid JSON/);
+});
+
 test("safeStaticTarget prevents serving files outside static directory", () => {
   const dir = mkdtempSync(join(tmpdir(), "arrakis-static-"));
   try {

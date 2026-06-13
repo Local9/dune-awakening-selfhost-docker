@@ -578,8 +578,10 @@ function validateCarePackageItem(item = {}) {
 
 function validateItemQuality(value) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return 0;
-  return Math.max(0, Math.min(5, Math.trunc(number)));
+  if (!Number.isFinite(number) || Math.trunc(number) !== number || number < 0 || number > 5) {
+    throw new Error("Expected item grade 0-5");
+  }
+  return number;
 }
 
 function validateSendMessage(value) {

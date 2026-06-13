@@ -18,7 +18,13 @@ export function parseCookies(header = "") {
   for (const part of header.split(";")) {
     const index = part.indexOf("=");
     if (index <= 0) continue;
-    cookies.set(part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim()));
+    let value;
+    try {
+      value = decodeURIComponent(part.slice(index + 1).trim());
+    } catch {
+      continue;
+    }
+    cookies.set(part.slice(0, index).trim(), value);
   }
   return cookies;
 }

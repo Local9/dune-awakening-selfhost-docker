@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildBroadcastCommand, buildCarePackageWhisperPayload, buildShutdownBroadcastCommand, publishCarePackageWhisper, validateBroadcastMessage, validateLocalizedTexts, validatePublishLabel } from "../src/platform/rmq.js";
+import { buildBroadcastCommand, buildCarePackageWhisperPayload, buildShutdownBroadcastCommand, publishCarePackageWhisper, publishServerCommand, validateBroadcastMessage, validateLocalizedTexts, validatePublishLabel } from "../src/platform/rmq.js";
 
 test("builds verified ServiceBroadcast generic command payload", () => {
   const command = buildBroadcastCommand({ message: "Server event starts soon", durationSec: 45, title: "Event" });
@@ -83,6 +83,20 @@ test("validates RabbitMQ publish labels before eval construction", () => {
   assert.equal(validatePublishLabel("web_shutdown_1"), "web_shutdown_1");
   assert.throws(() => validatePublishLabel("bad label"));
   assert.throws(() => validatePublishLabel("bad\"), halt(). %"));
+});
+
+test("publishServerCommand requires a configured command auth token", async () => {
+  const previousToken = process.env.DUNE_COMMAND_AUTH_TOKEN;
+  delete process.env.DUNE_COMMAND_AUTH_TOKEN;
+  try {
+    await assert.rejects(
+      () => publishServerCommand({ repoRoot: process.cwd(), commandTimeoutMs: 1000 }, buildBroadcastCommand({ message: "hello" })),
+      /Command auth token is not configured/
+    );
+  } finally {
+    if (previousToken === undefined) delete process.env.DUNE_COMMAND_AUTH_TOKEN;
+    else process.env.DUNE_COMMAND_AUTH_TOKEN = previousToken;
+  }
 });
 
 test("publishes Care Package whisper to direct player queue when available", async () => {

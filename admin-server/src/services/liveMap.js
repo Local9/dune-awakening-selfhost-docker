@@ -1,6 +1,8 @@
 import { audit } from "../core/audit.js";
 import { json } from "../core/auth.js";
 import { redact } from "../core/redact.js";
+import { validateNumber } from "../core/validation.js";
+import { intParam } from "../core/db.js";
 import { buildDuneArgs } from "../platform/runner.js";
 import * as duneDb from "../domain/duneDb.js";
 import { readJson, task } from "../lib/apiHelpers.js";
@@ -22,16 +24,18 @@ export async function liveMapMarkersRoute(ctx, res, url) {
 export async function liveMapTeleportPlayerRoute(ctx, req, res) {
   const body = await readJson(ctx, req);
   const playerId = String(body.playerId || "");
-  const payload = {
-    playerId,
-    x: Number(body.x),
-    y: Number(body.y),
-    z: Number(body.z ?? 5000),
-    yaw: Number(body.yaw || 0),
-    partitionId: Number(body.partitionId || 0)
-  };
-  if (!Number.isFinite(payload.x) || !Number.isFinite(payload.y) || !Number.isFinite(payload.z)) {
-    return json(res, 400, { error: "Valid X, Y, and Z coordinates are required." });
+  let payload;
+  try {
+    payload = {
+      playerId,
+      x: validateNumber(body.x, -100_000_000, 100_000_000, "x"),
+      y: validateNumber(body.y, -100_000_000, 100_000_000, "y"),
+      z: validateNumber(body.z ?? 5000, -100_000_000, 100_000_000, "z"),
+      yaw: validateNumber(body.yaw || 0, -360, 360, "yaw"),
+      partitionId: body.partitionId ? intParam(body.partitionId, "partitionId", 1, 1_000_000) : 0
+    };
+  } catch (error) {
+    return json(res, 400, { error: redact(error.message || error) });
   }
   if (body.online === true) {
     try {

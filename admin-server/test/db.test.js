@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertIdentifier, discoverDbConfig, isReadOnlySql, quoteQualified, redactDbError } from "../src/core/db.js";
+import { assertIdentifier, discoverDbConfig, intParam, isReadOnlySql, quoteQualified, redactDbError, validateSqlLength } from "../src/core/db.js";
 import { addCurrency, addFactionReputation, addIntel, completeJourneyNode, completeTutorial, deleteInventoryItem, giveItemToPlayer, giveItemToStorage, listPlayers, listTables, liveMapPlayers, liveMapServices, playerCraftingRecipes, playerJourney, playerResearchItems, resetJourneyNode, resetTutorial, runSql, tablePreview, unlockCraftingRecipe, unlockResearchItem, updateTableRow, UnsupportedCapabilityError } from "../src/domain/duneDb.js";
 
 test("discovers RedBlink Postgres defaults and env overrides", () => {
@@ -21,6 +21,26 @@ test("validates and quotes SQL identifiers", () => {
   assert.equal(quoteQualified("dune", "player_state"), '"dune"."player_state"');
   assert.throws(() => assertIdentifier("player_state;drop"));
   assert.throws(() => quoteQualified("dune", "../accounts"));
+});
+
+test("intParam rejects non-digit and out-of-range integers", () => {
+  assert.equal(intParam("25", "limit", 1, 500), 25);
+  assert.equal(intParam(0, "offset", 0), 0);
+  assert.throws(() => intParam("", "player id", 1));
+  assert.throws(() => intParam("1.5", "amount", 1, 10));
+  assert.throws(() => intParam("1e2", "amount", 1, 10));
+  assert.throws(() => intParam("999", "amount", 1, 10));
+});
+
+test("validateSqlLength rejects empty and oversized SQL", () => {
+  assert.equal(validateSqlLength("select 1"), "select 1");
+  assert.throws(() => validateSqlLength(""));
+  assert.throws(() => validateSqlLength("select ".repeat(50_000)));
+});
+
+test("runSql rejects oversized SQL queries", async () => {
+  const db = { query: async () => ({ fields: [], rows: [] }) };
+  await assert.rejects(() => runSql(db, "select ".repeat(50_000), false), /Invalid SQL query/);
 });
 
 test("detects destructive SQL and redacts connection strings", () => {
@@ -271,6 +291,47 @@ test("storage give-item validates capacity and inserts parameterized item rows",
   assert.deepEqual(insert.values.slice(0, 5), [7, "WaterBottle_1", 3, 0, 2]);
 });
 
+test("storage give-item rejects invalid quality grades", async () => {
+  const db = fakeMutationDb([], {
+    storageRows: [{ id: 7, actor_id: 222, max_item_count: 30, max_item_volume: 0 }]
+  });
+  await assert.rejects(
+    () => giveItemToStorage(db, 222, { templateId: "WaterBottle_1", quantity: 1, quality: 99 }),
+    /Invalid quality/
+  );
+});
+
+test("listPlayers rejects oversized search queries", async () => {
+  const db = {
+    query: async (text) => {
+      if (text.includes("to_regclass")) return { rows: [{ exists: true }] };
+      return { rows: [] };
+    }
+  };
+  await assert.rejects(() => listPlayers(db, { q: "x".repeat(121) }), /120 characters/);
+});
+
+test("database row update coerces values by column type", async () => {
+  const calls = [];
+  const db = {
+    query: async (text, values = []) => {
+      calls.push({ text, values });
+      if (text.includes("information_schema.columns")) {
+        return { rows: [{ name: "stack_size", data_type: "integer" }, { name: "template_id", data_type: "text" }] };
+      }
+      return { fields: [], rows: [], rowCount: 1, command: "UPDATE" };
+    }
+  };
+  await updateTableRow(db, "dune", "items", "(1,1)", { stack_size: "3", template_id: "WaterBottle_1" });
+  const update = calls.find((call) => call.text.includes("update \"dune\".\"items\""));
+  assert.ok(update);
+  assert.deepEqual(update.values.slice(0, 2), [3, "WaterBottle_1"]);
+  await assert.rejects(
+    () => updateTableRow(db, "dune", "items", "(1,1)", { stack_size: "bad" }),
+    /Invalid stack_size/
+  );
+});
+
 test("player give-item persists selected item grade", async () => {
   const calls = [];
   const db = fakeMutationDb(calls, {
@@ -330,7 +391,7 @@ test("intel mutation updates TechKnowledge points on the player actor", async ()
   const result = await addIntel(db, 123, { amount: 25 });
   assert.equal(result.oldValue, 10);
   assert.equal(result.newValue, 35);
-  assert.ok(calls.some((call) => call.text.includes("TechKnowledgePlayerComponent") && call.text.includes("jsonb_set") && call.values[1] === 35));
+  assert.ok(calls.some((call) => call.text.includes("TechKnowledgePlayerComponent") && call.text.includes("jsonb_set") && String(call.values[1]) === "35"));
 });
 
 test("crafting recipe listing uses verified BaseRecipeId names and player unlock status", async () => {

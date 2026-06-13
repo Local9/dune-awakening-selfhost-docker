@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, relative, sep } from "node:path";
 
 export async function readJsonBody(req, maxBytes) {
   const chunks = [];
@@ -15,7 +15,23 @@ export async function readJsonBody(req, maxBytes) {
     chunks.push(buffer);
   }
   if (!chunks.length) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      const invalid = new Error("Request body must be valid JSON");
+      invalid.statusCode = 400;
+      throw invalid;
+    }
+    throw error;
+  }
+}
+
+function isPathInside(root, target) {
+  const rel = relative(resolve(root), resolve(target));
+  if (rel === "") return true;
+  if (rel.startsWith("..")) return false;
+  return !rel.split(sep).includes("..");
 }
 
 export function safeStaticTarget(staticDir, requestPath) {
@@ -23,7 +39,7 @@ export function safeStaticTarget(staticDir, requestPath) {
   const normalizedPath = requestPath === "/" ? "/index.html" : requestPath;
   const file = resolve(dist, `.${normalizedPath}`);
   const fallback = resolve(dist, "index.html");
-  const safeFile = file.startsWith(`${dist}/`) ? file : fallback;
+  const safeFile = isPathInside(dist, file) ? file : fallback;
   return existsSync(safeFile) ? safeFile : fallback;
 }
 

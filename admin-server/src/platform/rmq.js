@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { redact } from "../core/redact.js";
 import { containerCommand } from "./containerRuntime.js";
 
-const BUILTIN_COMMAND_AUTH_TOKEN = "Nu6VmPWUMvdPMeB7qErr";
 const RMQ_CONTAINER = "dune-rmq-game";
 
 export function validateBroadcastMessage(message) {
@@ -160,12 +159,15 @@ export function validatePublishLabel(value) {
 
 function commandAuthToken(repoRoot) {
   const file = resolve(repoRoot, "runtime/secrets/command-auth-token.txt");
-  if (process.env.DUNE_COMMAND_AUTH_TOKEN) return process.env.DUNE_COMMAND_AUTH_TOKEN;
+  if (process.env.DUNE_COMMAND_AUTH_TOKEN) {
+    const raw = String(process.env.DUNE_COMMAND_AUTH_TOKEN).trim();
+    if (raw) return raw;
+  }
   if (existsSync(file)) {
     const raw = readFileSync(file, "utf8").trim();
     if (raw) return raw;
   }
-  return BUILTIN_COMMAND_AUTH_TOKEN;
+  throw new Error("Command auth token is not configured. Set DUNE_COMMAND_AUTH_TOKEN or create runtime/secrets/command-auth-token.txt");
 }
 
 function dockerExec(args, timeoutMs = 30000) {

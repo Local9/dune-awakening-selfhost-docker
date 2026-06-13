@@ -95,10 +95,20 @@ export function quoteQualified(schema, table) {
   return `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
 }
 
+export const MAX_SQL_LENGTH = 100_000;
+
 export function intParam(value, label, min = 0, max = Number.MAX_SAFE_INTEGER) {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < min || n > max) throw new Error(`Invalid ${label}`);
+  const raw = String(value ?? "").trim();
+  if (!/^-?\d+$/.test(raw)) throw new Error(`Invalid ${label}`);
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n < min || n > max) throw new Error(`Invalid ${label}`);
   return n;
+}
+
+export function validateSqlLength(query, max = MAX_SQL_LENGTH) {
+  const sql = String(query || "").trim();
+  if (!sql || sql.length > max) throw new Error("Invalid SQL query");
+  return sql;
 }
 
 export function isReadOnlySql(query) {

@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { redact } from "../core/redact.js";
+import { intParam, validateSqlLength } from "../core/db.js";
+import { validateNumber as validateNumericParam } from "../core/validation.js";
 import { containerCommand } from "./containerRuntime.js";
 
 export const serviceAliases = new Map([
@@ -416,15 +418,15 @@ function validatePlayerId(value) {
 }
 
 function validateInteger(value, min, max) {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < min || n > max) throw new Error(`Expected integer ${min}-${max}`);
-  return n;
+  try {
+    return intParam(value, "integer", min, max);
+  } catch {
+    throw new Error(`Expected integer ${min}-${max}`);
+  }
 }
 
 function validateNumber(value, min, max) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < min || n > max) throw new Error(`Expected number ${min}-${max}`);
-  return n;
+  return validateNumericParam(value, min, max, "number");
 }
 
 function validateItemName(value) {
@@ -577,8 +579,7 @@ export function isReadOnlySql(query) {
 }
 
 function validateSql(query, allowDestructive) {
-  const raw = String(query || "").trim();
-  if (!raw || raw.length > 100000) throw new Error("Invalid SQL query");
+  const raw = validateSqlLength(query);
   if (!allowDestructive && !isReadOnlySql(raw)) throw new Error("Only read-only SQL is allowed without destructive confirmation");
   return raw;
 }

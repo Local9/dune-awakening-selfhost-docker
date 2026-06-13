@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAuth, clearSessionCookie, setSessionCookie, json } from "../src/core/auth.js";
+import { createAuth, clearSessionCookie, setSessionCookie, json, parseCookies } from "../src/core/auth.js";
 
 test("auth creates readable signed sessions", () => {
   const auth = createAuth({ sessionSecret: "secret", adminPassword: "admin", authDisabled: false });
@@ -9,6 +9,12 @@ test("auth creates readable signed sessions", () => {
   assert.equal(auth.readSession(req)?.id, session.id);
   assert.equal(auth.passwordMatches("admin"), true);
   assert.equal(auth.passwordMatches("wrong"), false);
+});
+
+test("parseCookies ignores malformed percent-encoded values", () => {
+  const cookies = parseCookies("asc_session=abc%ZZ; other=ok");
+  assert.equal(cookies.has("asc_session"), false);
+  assert.equal(cookies.get("other"), "ok");
 });
 
 test("auth rejects state-changing requests without CSRF token", () => {

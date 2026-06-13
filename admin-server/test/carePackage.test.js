@@ -33,6 +33,7 @@ test("care package config validation rejects unsafe items and bounds", () => {
   assert.equal(validateCarePackageConfig({ autoGrantEnabled: true, autoGrantIntervalSeconds: 60, grantWhen: "first_online" }).grantWhen, "first_online");
   assert.equal(validateCarePackageConfig({ version: "bad version with spaces" }).version, "care-package-v1");
   assert.throws(() => validateCarePackageConfig({ items: [{ itemName: "Bad\nName" }] }), /Invalid Care Package item name/);
+  assert.throws(() => validateCarePackageConfig({ items: [{ itemName: "Water", quantity: 1, quality: 99 }] }), /Expected item grade 0-5/);
   assert.throws(() => validateCarePackageConfig({ xp: -1 }), /xp/);
   assert.throws(() => validateCarePackageConfig({ autoGrantIntervalSeconds: 59 }), /autoGrantIntervalSeconds/);
   assert.equal(validateCarePackageConfig({ grantWhen: "always" }).grantWhen, "first_online");

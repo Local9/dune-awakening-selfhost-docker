@@ -1,4 +1,5 @@
-import { assertIdentifier, intParam, isReadOnlySql, quoteIdentifier, quoteQualified, rowsResult } from "../core/db.js";
+import { assertIdentifier, intParam, isReadOnlySql, quoteIdentifier, quoteQualified, rowsResult, validateSqlLength } from "../core/db.js";
+import { validateNumber } from "../core/validation.js";
 
 export class UnsupportedCapabilityError extends Error {
   constructor(message, details = {}) {
@@ -86,7 +87,7 @@ export async function updateTableRow(db, schema, table, rowId, values = {}) {
 
   const itemEditMessage = schema === "dune" && table === "items" ? await manualItemEditMessage(db, safe, targetRow) : undefined;
   const assignments = entries.map(([key], index) => `${quoteIdentifier(key)} = $${index + 1}`);
-  const params = entries.map(([, value]) => normalizeEditableValue(value));
+  const params = entries.map(([key, value]) => coerceEditableValue(editable.get(key), value));
   params.push(targetRow);
   const result = await withKnownLiveRefresh(db, () => db.query(`update ${safe} set ${assignments.join(", ")} where ctid = $${params.length}::tid`, params), {
     features: liveRefreshFeaturesForTable(schema, table, entries.map(([key]) => key))
@@ -143,10 +144,54 @@ async function manualItemEditMessage(db, safeTable, rowId) {
   return `${row.template_id || "Item"} was saved in the database and will be loaded when the player next joins.`;
 }
 
-function normalizeEditableValue(value) {
+function coerceEditableValue(column, value) {
   if (value === undefined) return null;
-  if (typeof value === "object" && value !== null) return JSON.stringify(value);
-  return value;
+  if (value === null) return null;
+  const dataType = String(column?.data_type || "").toLowerCase();
+  const label = column?.name || "column";
+
+  if (dataType === "json" || dataType === "jsonb") {
+    if (typeof value === "object") return JSON.stringify(value);
+    if (typeof value === "string") {
+      JSON.parse(value);
+      return value;
+    }
+    throw new Error(`Invalid JSON for column ${label}`);
+  }
+
+  if (dataType === "bigint") {
+    const raw = String(value).trim();
+    if (!/^-?\d+$/.test(raw)) throw new Error(`Invalid ${label}`);
+    return raw;
+  }
+
+  if (dataType === "integer") {
+    return intParam(value, label, -2147483648, 2147483647);
+  }
+
+  if (dataType === "smallint") {
+    return intParam(value, label, -32768, 32767);
+  }
+
+  if (["double precision", "real", "numeric"].includes(dataType)) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) throw new Error(`Invalid ${label}`);
+    return n;
+  }
+
+  if (dataType === "boolean") {
+    if (typeof value === "boolean") return value;
+    const raw = String(value).trim().toLowerCase();
+    if (raw === "true" || raw === "t" || raw === "1") return true;
+    if (raw === "false" || raw === "f" || raw === "0") return false;
+    throw new Error(`Invalid ${label}`);
+  }
+
+  if (typeof value === "object") throw new Error(`Invalid value type for column ${label}`);
+  const text = String(value);
+  if (text.length > 10_000) throw new Error(`Column ${label} value is too long`);
+  if (/[\r\n\0]/.test(text)) throw new Error(`Column ${label} cannot contain line breaks`);
+  return text;
 }
 
 export async function searchDatabase(db, q) {
@@ -163,8 +208,7 @@ export async function searchDatabase(db, q) {
 }
 
 export async function runSql(db, query, allowDestructive = false) {
-  const sql = String(query || "").trim();
-  if (!sql) throw new Error("SQL query is required");
+  const sql = validateSqlLength(query);
   const readOnly = isReadOnlySql(sql);
   if (!allowDestructive && !readOnly) throw new Error("Only read-only SQL is allowed without destructive confirmation");
   const result = readOnly
@@ -761,7 +805,9 @@ export async function listPlayers(db, { online = false, q = "" } = {}) {
   where += " and coalesce(ps.character_name, '') <> 'Server'";
   if (online) where += " and coalesce(ps.online_status::text, '') = 'Online'";
   if (q) {
-    values.push(`%${q}%`);
+    const term = String(q).trim();
+    if (term.length > 120) throw new Error("Search query must be 120 characters or fewer");
+    values.push(`%${term}%`);
     where += ` and (ps.character_name ilike $${values.length} or ac."user" ilike $${values.length} or a.id::text = $${values.length} or a.owner_account_id::text = $${values.length})`;
   }
   const result = await db.query(`
@@ -1143,6 +1189,9 @@ export async function liveMapPlayers(db, map = "") {
 
 export async function teleportOfflinePlayerToCoords(db, playerId, { x, y, z, partitionId = 0 } = {}) {
   const flsId = validatePlayerIdForDb(playerId);
+  const safeX = validateNumber(x, -100_000_000, 100_000_000, "x");
+  const safeY = validateNumber(y, -100_000_000, 100_000_000, "y");
+  const safeZ = validateNumber(z, -100_000_000, 100_000_000, "z");
   const resolvedPartition = await resolveTeleportPartition(db, flsId, partitionId);
   if (!resolvedPartition) {
     return { supported: false, reason: "Could not resolve a valid map partition for this offline player." };
@@ -1158,13 +1207,13 @@ export async function teleportOfflinePlayerToCoords(db, playerId, { x, y, z, par
     select dune.admin_move_offline_player_to_partition($1::text, $2::bigint, ROW($3::float8,$4::float8,$5::float8)::dune.Vector)`, [
     flsId,
     resolvedPartition,
-    Number(x),
-    Number(y),
-    Number(z)
+    safeX,
+    safeY,
+    safeZ
   ]);
   return {
     supported: true,
-    result: { playerId: flsId, partitionId: resolvedPartition, x: Number(x), y: Number(y), z: Number(z) },
+    result: { playerId: flsId, partitionId: resolvedPartition, x: safeX, y: safeY, z: safeZ },
     message: "Offline player respawn location was saved. The player will land there the next time they log in."
   };
 }
@@ -1416,17 +1465,17 @@ export async function addIntel(db, id, { amount }) {
       from dune.actors
       where id = $1 and properties ? 'TechKnowledgePlayerComponent'`, [player.actorId]);
     if (!current.rows.length) throw new UnsupportedCapabilityError(`TechKnowledgePlayerComponent not found for player ${player.actorId}.`);
-    const oldValue = Number(current.rows[0]?.intel || 0);
-    const nextValue = Math.max(0, oldValue + delta);
+    const oldValue = BigInt(String(current.rows[0]?.intel || 0));
+    const nextValue = oldValue + BigInt(delta) < 0n ? 0n : oldValue + BigInt(delta);
     await tx.query(`
       update dune.actors
       set properties = jsonb_set(properties, '{TechKnowledgePlayerComponent,m_TechKnowledgePoints}', to_jsonb($2::bigint))
-      where id = $1 and properties ? 'TechKnowledgePlayerComponent'`, [player.actorId, nextValue]);
+      where id = $1 and properties ? 'TechKnowledgePlayerComponent'`, [player.actorId, nextValue.toString()]);
     return {
       ok: true,
       player,
-      oldValue,
-      newValue: nextValue,
+      oldValue: Number(oldValue),
+      newValue: Number(nextValue),
       amount: delta,
       message: playerOnline(player)
         ? "Intel was updated in the database. The player may need to relog before the new intel amount appears in-game."
@@ -1767,7 +1816,7 @@ export async function giveItemToStorage(db, storageId, { itemName = "", itemId =
   const target = intParam(storageId, "storage id", 1);
   const resolvedTemplate = validateTemplateId(templateId || itemId || itemName);
   const stackSize = intParam(quantity, "quantity", 1, 1000000);
-  const qualityLevel = intParam(quality, "quality", 0, 1000000);
+  const qualityLevel = intParam(quality, "quality", 0, 5);
   return db.transaction(async (tx) => {
     const storage = await tx.query(`
       select id, actor_id, coalesce(max_item_count, 0)::int as max_item_count, coalesce(max_item_volume, 0)::int as max_item_volume
@@ -2393,8 +2442,10 @@ function validatePlayerIdForDb(value) {
 }
 
 async function resolveTeleportPartition(db, playerId, partitionId) {
-  const requested = Number(partitionId || 0);
-  if (Number.isInteger(requested) && requested > 0) return requested;
+  const raw = partitionId ?? 0;
+  if (raw !== 0 && raw !== "0" && String(raw).trim() !== "") {
+    return intParam(raw, "partition id", 1, 1_000_000);
+  }
   const current = await db.query(`
     select coalesce(a.partition_id, 0) as partition_id
     from dune.accounts ac
