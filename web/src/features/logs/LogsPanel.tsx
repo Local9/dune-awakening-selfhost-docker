@@ -1,1 +1,0 @@
-export { LogsPanel } from "../panels";

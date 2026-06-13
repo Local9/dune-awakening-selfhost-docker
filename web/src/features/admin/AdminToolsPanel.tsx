@@ -1,1 +1,0 @@
-export { AdminToolsPanel } from "../panels";

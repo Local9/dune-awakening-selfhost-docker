@@ -1,1 +1,0 @@
-export { MapsPanel } from "../panels";

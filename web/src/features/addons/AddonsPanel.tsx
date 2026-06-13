@@ -1,1 +1,0 @@
-export { AddonsPanel } from "../panels";
