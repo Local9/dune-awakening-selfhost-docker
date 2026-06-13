@@ -6,9 +6,12 @@ cd "$(dirname "$0")"
 APP_NAME="Dune Docker Console"
 WEB_COMPOSE="docker-compose.web.yml"
 WEB_SERVICE="redblink-dune-docker-console"
-WEB_PORT="${ADMIN_BIND_PORT:-8088}"
+WEB_PORT=8088
 DOCKER=(docker)
 DOCKER_GROUP_UPDATED=0
+
+# shellcheck source=runtime/scripts/web-compose.sh
+source "$(dirname "$0")/runtime/scripts/web-compose.sh"
 
 say() {
   printf '\n%s\n' "$1"
@@ -203,7 +206,9 @@ start_console() {
 
   step "Starting the Web UI."
   export DUNE_HOST_REPO_ROOT="${DUNE_HOST_REPO_ROOT:-$(pwd -P)}"
-  "${DOCKER[@]}" compose -f "$WEB_COMPOSE" up -d --build "$WEB_SERVICE"
+  ensure_dune_net
+  web_compose_file_args
+  "${DOCKER[@]}" compose "${WEB_COMPOSE_FILE_ARGS[@]}" up -d --build "$WEB_SERVICE"
 }
 
 read_admin_password() {

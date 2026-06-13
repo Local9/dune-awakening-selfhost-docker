@@ -68,6 +68,18 @@ bash -c 'set -euo pipefail; if ! command -v curl >/dev/null 2>&1; then sudo apt-
 
 The installer downloads the latest release, prepares the server, starts the Web UI, and tells you what address to open in your browser. If you are on the same network as the server, use the same-network address. If you are connecting over the internet, use the public address and allow TCP `8088` in your firewall.
 
+### Optional Traefik (HTTPS)
+
+Default installs expose the Web UI on host port `8088`. To route through external Traefik with Let's Encrypt instead:
+
+```bash
+cp docker-compose.traefik.example.yml docker-compose.traefik.yml
+# Set DOMAIN (and optional TRAEFIK_* vars) in .env — see .env.example
+docker compose -f docker-compose.web.yml -f docker-compose.traefik.yml up -d --build
+```
+
+Your Traefik stack needs `web` and `websecure` entrypoints and a cert resolver named `letsencrypt` (or set `TRAEFIK_CERTRESOLVER` in `.env`). Uncomment `ports: !reset []` in `docker-compose.traefik.yml` if you do not want direct host `:8088` access.
+
 ## Contributing & Project Notes
 
 - Issues, fixes, and improvements are welcome.

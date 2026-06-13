@@ -5,18 +5,22 @@ services:
       dockerfile: admin-server/Dockerfile
     image: redblink-dune-docker-console:dev
     container_name: redblink-dune-docker-console
+    # Web UI: container port 8088, published to host 8088 by default.
+    # Optional Traefik routing: see docker-compose.traefik.example.yml
     restart: unless-stopped
-    # Host networking lets the console reach RedBlink defaults such as
-    # Postgres on 127.0.0.1:15432 and bind ADMIN_BIND_PORT directly.
-    network_mode: host
+    networks:
+      - dune-net
+    ports:
+      - "8088:8088"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DUNE_DOCKER_DIR: /repo
       DUNE_CONTAINER_REPO_ROOT: /repo
       DUNE_HOST_REPO_ROOT: "${DUNE_HOST_REPO_ROOT:-${PWD}}"
       # Make RedBlink dune scripts target the main Dune stack, not this web-only compose project.
       COMPOSE_PROJECT_NAME: "${DUNE_COMPOSE_PROJECT_NAME:-dune-awakening-selfhost-docker}"
-      ADMIN_BIND_HOST: "${ADMIN_BIND_HOST:-0.0.0.0}"
-      ADMIN_BIND_PORT: "${ADMIN_BIND_PORT:-8088}"
+      ADMIN_BIND_HOST: "0.0.0.0"
       ADMIN_AUTH_DISABLED: "${ADMIN_AUTH_DISABLED:-0}"
       ADMIN_SECURE_COOKIES: "${ADMIN_SECURE_COOKIES:-0}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
@@ -27,11 +31,12 @@ services:
       ADMIN_MOCK_MODE: "${ADMIN_MOCK_MODE:-0}"
       ADMIN_STATIC_DIR: /app/web-dist
       ADMIN_DATABASE_URL: "${ADMIN_DATABASE_URL:-}"
-      DUNE_DB_HOST: "${DUNE_DB_HOST:-}"
-      DUNE_DB_PORT: "${DUNE_DB_PORT:-}"
+      DUNE_DB_HOST: "${DUNE_DB_HOST:-dune-postgres}"
+      DUNE_DB_PORT: "${DUNE_DB_PORT:-5432}"
       DUNE_DB_NAME: "${DUNE_DB_NAME:-}"
       DUNE_DB_USER: "${DUNE_DB_USER:-}"
       DUNE_DB_PASSWORD: "${DUNE_DB_PASSWORD:-}"
+      DUNE_PREFLIGHT_HOST: "${DUNE_PREFLIGHT_HOST:-host.docker.internal}"
       DUNE_COMMAND_AUTH_TOKEN: "${DUNE_COMMAND_AUTH_TOKEN:-}"
       DUNE_SELF_UPDATE_MODE: "${DUNE_SELF_UPDATE_MODE:-}"
       DUNE_SELF_UPDATE_REPO: "${DUNE_SELF_UPDATE_REPO:-}"
@@ -43,3 +48,8 @@ services:
       # WARNING: mounting the Docker socket gives this container broad control
       # over the host Docker daemon. Expose the web admin only to trusted admins.
       - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  dune-net:
+    external: true
+    name: dune-net

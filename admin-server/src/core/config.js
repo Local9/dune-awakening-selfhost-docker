@@ -20,7 +20,7 @@ export function loadConfig() {
     repoRoot,
     duneScript: resolve(repoRoot, "runtime/scripts/dune"),
     host: resolveAdminBindHost(process.env.ADMIN_BIND_HOST),
-    port: Number(process.env.ADMIN_BIND_PORT || 8088),
+    port: 8088,
     authDisabled: process.env.ADMIN_AUTH_DISABLED === "1",
     secureCookies: secureCookieEnv === undefined ? process.env.NODE_ENV === "production" : secureCookieEnv === "1",
     allowHostBootstrap: process.env.ALLOW_HOST_BOOTSTRAP === "true",

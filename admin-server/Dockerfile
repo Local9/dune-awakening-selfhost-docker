@@ -47,5 +47,4 @@ RUN pnpm install --frozen-lockfile --prod
 COPY admin-server/src ./src
 COPY --from=web-build /app/web/dist /app/web-dist
 WORKDIR /repo
-EXPOSE 8088
 CMD ["node", "/app/src/server.js"]

@@ -1,0 +1,40 @@
+# Optional Traefik overlay for Dune Docker Console (external Traefik + Let's Encrypt).
+#
+# Default installs work on http://<host>:8088 without this file.
+#
+# Setup (manual, once):
+#   cp docker-compose.traefik.example.yml docker-compose.traefik.yml
+#   # set DOMAIN (and optional TRAEFIK_* vars) in .env
+#
+# Optional: uncomment ports !reset in docker-compose.traefik.yml to stop publishing host :8088.
+#
+# Start:
+#   docker compose -f docker-compose.web.yml -f docker-compose.traefik.yml up -d --build
+
+services:
+  redblink-dune-docker-console:
+    networks:
+      - traefik
+    environment:
+      ADMIN_SECURE_COOKIES: "1"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_DOCKER_NETWORK:-web}"
+      - "traefik.http.routers.dune-console.rule=${TRAEFIK_RULE:-Host(`${DOMAIN}`)}"
+      - "traefik.http.routers.dune-console.entrypoints=web"
+      - "traefik.http.routers.dune-console.service=dune-console"
+      - "traefik.http.routers.dune-console-secure.rule=${TRAEFIK_RULE:-Host(`${DOMAIN}`)}"
+      - "traefik.http.routers.dune-console-secure.entrypoints=websecure"
+      - "traefik.http.routers.dune-console-secure.tls=true"
+      - "traefik.http.routers.dune-console-secure.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.routers.dune-console-secure.tls.domains[0].main=${TRAEFIK_TLS_MAIN:-${DOMAIN}}"
+      - "traefik.http.routers.dune-console-secure.tls.domains[0].sans=${TRAEFIK_TLS_SANS:-}"
+      - "traefik.http.routers.dune-console-secure.service=dune-console"
+      - "traefik.http.services.dune-console.loadbalancer.server.port=8088"
+    # Optional: uncomment to stop publishing host :8088 when using Traefik only
+    # ports: !reset []
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_DOCKER_NETWORK:-web}

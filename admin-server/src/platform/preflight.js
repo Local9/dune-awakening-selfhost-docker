@@ -1,10 +1,10 @@
 import { existsSync, statSync, readFileSync } from "node:fs";
 import { arch, freemem, platform, release, totalmem } from "node:os";
 import { execFileSync } from "node:child_process";
-import { createServer } from "node:net";
+import { connect } from "node:net";
 import { resolve } from "node:path";
 
-const ports = [15432, 31982, 31983, 32573, 5059, 7777, 7778, 7888, 7889, 11717];
+const hostPorts = [15432, 31982, 31983, 32573, 5059, 7777, 7778, 7888, 7889, 11717];
 
 export async function preflight(config) {
   const checks = [];
@@ -23,7 +23,9 @@ export async function preflight(config) {
   checks.push(fileCheck("Funcom token", resolve(config.secretsDir, "funcom-token.txt"), true));
   checks.push(fileCheck("Generated runtime files", config.generatedDir, true));
   checks.push(fileCheck("Backup directory", resolve(config.repoRoot, "runtime/backups/db"), true));
-  checks.push(...await Promise.all(ports.map(portCheck)));
+  checks.push(await portCheckConnect("Port 5432 (Postgres)", "dune-postgres", 5432));
+  const preflightHost = process.env.DUNE_PREFLIGHT_HOST || "127.0.0.1";
+  checks.push(...await Promise.all(hostPorts.map((port) => portCheckConnect(`Port ${port}`, preflightHost, port))));
   return { checks, summary: summarize(checks) };
 }
 
@@ -122,12 +124,23 @@ function cpuFlags() {
   }
 }
 
-async function portCheck(port) {
+async function portCheckConnect(name, host, port) {
   return new Promise((resolveCheck) => {
-    const server = createServer();
-    server.once("error", () => resolveCheck(check(`Port ${port}`, "warn", "Already in use or unavailable")));
-    server.once("listening", () => server.close(() => resolveCheck(check(`Port ${port}`, "pass", "Available"))));
-    server.listen(port, "0.0.0.0");
+    const socket = connect({ host, port });
+    const finish = (result) => {
+      socket.destroy();
+      resolveCheck(result);
+    };
+    socket.setTimeout(2000);
+    socket.once("connect", () => finish(check(name, "warn", "Already in use on host")));
+    socket.once("timeout", () => finish(check(name, "warn", "Probe timed out")));
+    socket.once("error", (error) => {
+      if (error.code === "ECONNREFUSED") {
+        finish(check(name, "pass", "Available"));
+        return;
+      }
+      finish(check(name, "warn", `Could not probe (${error.code || error.message})`));
+    });
   });
 }
 

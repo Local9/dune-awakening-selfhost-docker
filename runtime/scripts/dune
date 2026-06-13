@@ -3,6 +3,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
+# shellcheck source=web-compose.sh
+source "$(dirname "$0")/web-compose.sh"
+
 cmd="${1:-help}"
 target="${2:-}"
 
@@ -64,9 +67,8 @@ detect_web_console_ip() {
 }
 
 print_web_console_url() {
-  local port="${ADMIN_BIND_PORT:-8088}"
   echo "Open Dune Docker Console in your browser:"
-  echo "  http://$(detect_web_console_ip):$port"
+  echo "  http://$(detect_web_console_ip):8088"
 }
 
 case "$cmd" in
@@ -86,7 +88,7 @@ The interactive CLI manager has moved to Dune Docker Console.
 Use dune --help to see available CLI commands for automation and troubleshooting.
 EOF
     if [ -f docker-compose.web.yml ] && command -v docker >/dev/null 2>&1; then
-      service="$(docker compose -f docker-compose.web.yml config --services 2>/dev/null | grep -E '^redblink-dune-docker-console$' | head -n1 || true)"
+      service="$(web_compose_config_services | grep -E '^redblink-dune-docker-console$' | head -n1 || true)"
       if [ -n "$service" ]; then
         echo
         if docker ps --format '{{.Names}}' | grep -qx redblink-dune-docker-console; then
@@ -94,12 +96,12 @@ EOF
           print_web_console_url
         else
           echo "Starting Dune Docker Console..."
-          if DUNE_HOST_REPO_ROOT="${DUNE_HOST_REPO_ROOT:-$(pwd -P)}" docker compose -f docker-compose.web.yml up -d --build "$service"; then
+          if web_compose_up_console "$service"; then
             echo "Dune Docker Console is running."
             print_web_console_url
           else
             echo "Dune Docker Console could not be started automatically."
-            echo "Run: DUNE_HOST_REPO_ROOT=\"\$(pwd -P)\" docker compose -f docker-compose.web.yml up -d --build redblink-dune-docker-console"
+            echo "Run: DUNE_HOST_REPO_ROOT=\"\$(pwd -P)\" docker compose $(web_compose_files_hint) up -d --build redblink-dune-docker-console"
             exit 1
           fi
         fi
@@ -118,7 +120,7 @@ EOF
       echo
       echo "Docker Compose or docker-compose.web.yml is unavailable."
       echo "Run this from the repo root after Docker is available:"
-      echo "  docker compose -f docker-compose.web.yml up -d --build --force-recreate redblink-dune-docker-console"
+      echo "  docker compose $(web_compose_files_hint) up -d --build --force-recreate redblink-dune-docker-console"
     fi
     ;;
 

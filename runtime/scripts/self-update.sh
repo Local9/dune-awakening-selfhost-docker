@@ -4,6 +4,9 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 ROOT_DIR="$(pwd)"
 
+# shellcheck source=web-compose.sh
+source "$(dirname "$0")/web-compose.sh"
+
 CURRENT_VERSION="dev"
 [ -f VERSION ] && CURRENT_VERSION="$(tr -d '[:space:]' < VERSION)"
 
@@ -661,14 +664,16 @@ web_console_service_name() {
   if ! command -v docker >/dev/null 2>&1; then
     return 1
   fi
-  service="$(docker compose -f docker-compose.web.yml config --services 2>/dev/null | grep -E '^redblink-dune-docker-console$' | head -n1 || true)"
+  service="$(web_compose_config_services | grep -E '^redblink-dune-docker-console$' | head -n1 || true)"
   [ -n "$service" ] || return 1
   printf '%s\n' "$service"
 }
 
 rebuild_web_console_now() {
   local service="$1"
-  DUNE_HOST_REPO_ROOT="$HOST_ROOT_DIR" docker compose -f docker-compose.web.yml up -d --build --force-recreate "$service"
+  ensure_dune_net
+  web_compose_file_args
+  DUNE_HOST_REPO_ROOT="$HOST_ROOT_DIR" docker compose "${WEB_COMPOSE_FILE_ARGS[@]}" up -d --build --force-recreate "$service"
 }
 
 rebuild_web_console_after_update() {
@@ -678,7 +683,7 @@ rebuild_web_console_after_update() {
     echo
     echo "Dune Docker Console rebuild was skipped because docker-compose.web.yml or Docker Compose is unavailable."
     echo "Run this manually after the update if you use the web panel:"
-    echo "  docker compose -f docker-compose.web.yml up -d --build --force-recreate redblink-dune-docker-console"
+    echo "  docker compose $(web_compose_files_hint) up -d --build --force-recreate redblink-dune-docker-console"
     return 0
   fi
 
