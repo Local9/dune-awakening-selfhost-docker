@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { statfsSync } from "node:fs";
 import { isSetupComplete } from "../app/context.js";
 import { redact } from "../core/redact.js";
+import { containerCommand } from "../platform/containerRuntime.js";
 
 export function scheduleBootAutoStart(ctx) {
   if (ctx.config.mockMode || process.env.ADMIN_AUTO_START_STACK_ON_BOOT === "0") return;
@@ -76,7 +77,7 @@ export async function isInitializedStackPresent(ctx) {
 
 export function dockerPsNames(ctx) {
   return new Promise((resolveNames, rejectNames) => {
-    const child = spawn("docker", ["ps", "--format", "{{.Names}}"], { cwd: ctx.config.repoRoot, shell: false });
+    const child = spawn(containerCommand(), ["ps", "--format", "{{.Names}}"], { cwd: ctx.config.repoRoot, shell: false });
     let stdout = "";
     let stderr = "";
     const timeout = setTimeout(() => child.kill("SIGTERM"), 10000);
@@ -137,37 +138,50 @@ export async function performanceSnapshot(ctx) {
 }
 
 function readCpuUsagePercent() {
-  const line = readFileSync("/proc/stat", "utf8").split(/\r?\n/).find((row) => row.startsWith("cpu "));
-  if (!line) return null;
-  const values = line.trim().split(/\s+/).slice(1).map((value) => Number(value) || 0);
-  const idle = (values[3] || 0) + (values[4] || 0);
-  const total = values.reduce((sum, value) => sum + value, 0);
-  const current = { idle, total };
-  if (!previousCpuSample) {
+  try {
+    const line = readFileSync("/proc/stat", "utf8").split(/\r?\n/).find((row) => row.startsWith("cpu "));
+    if (!line) return null;
+    const values = line.trim().split(/\s+/).slice(1).map((value) => Number(value) || 0);
+    const idle = (values[3] || 0) + (values[4] || 0);
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const current = { idle, total };
+    if (!previousCpuSample) {
+      previousCpuSample = current;
+      return null;
+    }
+    const totalDelta = current.total - previousCpuSample.total;
+    const idleDelta = current.idle - previousCpuSample.idle;
     previousCpuSample = current;
+    if (totalDelta <= 0) return null;
+    return roundPercent(((totalDelta - idleDelta) / totalDelta) * 100);
+  } catch {
     return null;
   }
-  const totalDelta = current.total - previousCpuSample.total;
-  const idleDelta = current.idle - previousCpuSample.idle;
-  previousCpuSample = current;
-  if (totalDelta <= 0) return null;
-  return roundPercent(((totalDelta - idleDelta) / totalDelta) * 100);
 }
 
 function readMemoryUsage() {
-  const rows = Object.fromEntries(readFileSync("/proc/meminfo", "utf8").split(/\r?\n/).map((line) => {
-    const match = line.match(/^([^:]+):\s+(\d+)/);
-    return match ? [match[1], Number(match[2]) * 1024] : null;
-  }).filter(Boolean));
-  const total = rows.MemTotal || 0;
-  const available = rows.MemAvailable || 0;
-  const used = Math.max(0, total - available);
-  return {
-    usedBytes: used,
-    totalBytes: total,
-    availableBytes: available,
-    percent: total ? roundPercent((used / total) * 100) : null
-  };
+  try {
+    const rows = Object.fromEntries(readFileSync("/proc/meminfo", "utf8").split(/\r?\n/).map((line) => {
+      const match = line.match(/^([^:]+):\s+(\d+)/);
+      return match ? [match[1], Number(match[2]) * 1024] : null;
+    }).filter(Boolean));
+    const total = rows.MemTotal || 0;
+    const available = rows.MemAvailable || 0;
+    const used = Math.max(0, total - available);
+    return {
+      usedBytes: used,
+      totalBytes: total,
+      availableBytes: available,
+      percent: total ? roundPercent((used / total) * 100) : null
+    };
+  } catch {
+    return {
+      usedBytes: 0,
+      totalBytes: 0,
+      availableBytes: 0,
+      percent: null
+    };
+  }
 }
 
 function readDiskUsage(path) {
@@ -184,8 +198,12 @@ function readDiskUsage(path) {
 }
 
 function readHostUptimeSeconds() {
-  const value = readFileSync("/proc/uptime", "utf8").trim().split(/\s+/)[0];
-  return Math.max(0, Math.floor(Number(value) || 0));
+  try {
+    const value = readFileSync("/proc/uptime", "utf8").trim().split(/\s+/)[0];
+    return Math.max(0, Math.floor(Number(value) || 0));
+  } catch {
+    return 0;
+  }
 }
 
 function formatUptime(seconds) {

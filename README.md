@@ -88,9 +88,11 @@ Your Traefik stack needs `web` and `websecure` entrypoints and a cert resolver n
 - Keep secrets, generated runtime files, and backups out of git.
 - Do not expose the Web UI to untrusted users.
 
-### Development
+### Development and local QA
 
 Local work on the web admin (`admin-server` and `web`) requires **Node.js 24 LTS**. The repo root `.nvmrc` pins `24` for `nvm`, `fnm`, or `volta`.
+
+**Quick checks (any OS, no containers):**
 
 ```bash
 node --version          # expect v24.x
@@ -99,7 +101,43 @@ cd admin-server && pnpm install && pnpm test
 cd ../web && pnpm install && pnpm run build
 ```
 
-Production installs via `install.sh` build the console through Docker and does not require Node on the host.
+**End-to-end production QA (full stack + admin panel):**
+
+One command bootstraps missing setup (non-destructively), starts the real Dune stack, builds the production console image, and **only succeeds when the admin panel and core services are live**. Use this to test API methods against real postgres, Docker, and `dune` scripts—not mock mode.
+
+```powershell
+# Windows PowerShell (Podman Desktop, Docker Desktop, or WSL2)
+$env:DUNE_QA_FUNCOM_TOKEN = "<your-funcom-token>"   # required for up / wait-ready
+node scripts/qa-console.mjs up
+# open http://127.0.0.1:8088
+node scripts/qa-console.mjs wait-ready              # optional: wait for game readiness (can take hours on first install)
+node scripts/qa-console.mjs down                      # stops console only
+node scripts/qa-console.mjs down --all              # stops console + Dune stack
+```
+
+```bash
+# Linux / WSL2 / macOS
+export DUNE_QA_FUNCOM_TOKEN="<your-funcom-token>"   # required for up / wait-ready
+./scripts/qa-console.sh up
+./scripts/qa-console.sh wait-ready
+./scripts/qa-console.sh check
+```
+
+| Command | Purpose |
+|---|---|
+| `up` | Bootstrap, start stack, start production console, verify gates |
+| `check` | Runtime, setup files, container and health status (read-only) |
+| `wait-ready` | Poll `dune ready` until no FAIL (long timeout on first install) |
+| `logs` / `logs --stack` | Console or core stack container logs |
+| `down` / `down --all` | Stop console, or console + stack |
+
+`up` and `wait-ready` require `DUNE_QA_FUNCOM_TOKEN` in the environment. If it is unset, the script exits immediately and does not touch Docker or local setup files.
+
+**Windows notes:** The game stack requires a Linux container host (Podman Machine or WSL2). Bash scripts run via WSL or Git Bash. Set `DUNE_QA_BASH` to your `bash.exe` if needed. The QA script sets `DUNE_CONTAINER_SOCKET` and `DUNE_HOST_REPO_ROOT` automatically for Podman/Docker.
+
+**Timeouts:** `QA_PANEL_TIMEOUT_MS` (default 120000), `QA_STACK_TIMEOUT_MS` (default 600000), `QA_READY_TIMEOUT_MS` (default 7200000).
+
+Production installs via `install.sh` build the console through Docker and do not require Node on the host.
 
 ## Credits
 

@@ -47,7 +47,13 @@ services:
       - ./:/repo
       # WARNING: mounting the Docker socket gives this container broad control
       # over the host Docker daemon. Expose the web admin only to trusted admins.
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DUNE_CONTAINER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8088/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
 networks:
   dune-net:

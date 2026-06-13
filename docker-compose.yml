@@ -16,7 +16,7 @@ services:
       DUNE_STEAM_DIR: "/srv/dune/steam"
       DUNE_GENERATED_DIR: "/srv/dune/generated"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DUNE_CONTAINER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
       - dune-server:/srv/dune/server
       - dune-steam:/srv/dune/steam
       - dune-cache:/srv/dune/cache

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { redact } from "../core/redact.js";
+import { containerCommand } from "./containerRuntime.js";
 
 export const serviceAliases = new Map([
   ["postgres", "postgres"],
@@ -324,7 +325,7 @@ export function runDockerLogs(service, options = {}) {
   args.push(container);
 
   return new Promise((resolve, reject) => {
-    const child = spawn("docker", args, {
+    const child = spawn(containerCommand(), args, {
       shell: false,
       env: { ...process.env }
     });
@@ -344,7 +345,7 @@ export function runDockerLogs(service, options = {}) {
     child.on("error", reject);
     child.on("close", (code, signal) => {
       clearTimeout(timeout);
-      const result = { code, signal, stdout, stderr, args: ["docker", ...args] };
+      const result = { code, signal, stdout, stderr, args: [containerCommand(), ...args] };
       if (code === 0 || signal === "SIGTERM") resolve(result);
       else reject(Object.assign(new Error(`docker ${args.join(" ")} failed with exit ${code}`), result));
     });

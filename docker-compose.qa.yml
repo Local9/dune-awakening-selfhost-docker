@@ -1,0 +1,5 @@
+# QA overlay for docker-compose.web.yml — real backends, explicit stack ordering.
+services:
+  redblink-dune-docker-console:
+    environment:
+      ADMIN_AUTO_START_STACK_ON_BOOT: "0"

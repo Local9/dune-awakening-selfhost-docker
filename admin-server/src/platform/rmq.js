@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { redact } from "../core/redact.js";
+import { containerCommand } from "./containerRuntime.js";
 
 const BUILTIN_COMMAND_AUTH_TOKEN = "Nu6VmPWUMvdPMeB7qErr";
 const RMQ_CONTAINER = "dune-rmq-game";
@@ -170,7 +171,7 @@ function commandAuthToken(repoRoot) {
 function dockerExec(args, timeoutMs = 30000) {
   return new Promise((resolvePromise, reject) => {
     const spawnFn = globalThis.__testSpawn || spawn;
-    const child = spawnFn("docker", args, { shell: false, env: { ...process.env } });
+    const child = spawnFn(containerCommand(), args, { shell: false, env: { ...process.env } });
     const timeout = setTimeout(() => child.kill("SIGTERM"), timeoutMs);
     let stdout = "";
     let stderr = "";
@@ -179,7 +180,7 @@ function dockerExec(args, timeoutMs = 30000) {
     child.on("error", reject);
     child.on("close", (code) => {
       clearTimeout(timeout);
-      const result = { code, stdout, stderr, args: ["docker", ...args] };
+      const result = { code, stdout, stderr, args: [containerCommand(), ...args] };
       if (code === 0) resolvePromise(result);
       else reject(Object.assign(new Error(`docker ${args.slice(0, 3).join(" ")} failed with exit ${code}: ${stderr || stdout}`), result));
     });
