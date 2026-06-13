@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+  - job_name: cadvisor
+    static_configs:
+      - targets:
+          - dune-cadvisor:8080
+
+  # RabbitMQ exposes Prometheus metrics when rabbitmq_prometheus is enabled (default in this stack).
+  - job_name: rabbitmq
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - dune-rmq-admin:15692
+          - dune-rmq-game:15692

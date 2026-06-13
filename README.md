@@ -80,6 +80,20 @@ docker compose -f docker-compose.web.yml -f docker-compose.traefik.yml up -d --b
 
 Your Traefik stack needs `web` and `websecure` entrypoints and a cert resolver named `letsencrypt` (or set `TRAEFIK_CERTRESOLVER` in `.env`). Uncomment `ports: !reset []` in `docker-compose.traefik.yml` if you do not want direct host `:8088` access.
 
+### Optional Grafana (container monitoring)
+
+For CPU, memory, and network charts of `dune-*` containers, enable the monitoring overlay (Prometheus + cAdvisor + Grafana):
+
+```bash
+cp docker-compose.monitoring.example.yml docker-compose.monitoring.yml
+# GRAFANA_ADMIN_PASSWORD is required — set it in .env before starting Grafana (see .env.example)
+docker compose -f docker-compose.web.yml -f docker-compose.monitoring.yml up -d --build
+```
+
+Open Grafana at `http://127.0.0.1:3000` by default. Sign in with **`admin`** (or `GRAFANA_ADMIN_USER`) and the password you set in `GRAFANA_ADMIN_PASSWORD`. Grafana will not start if that variable is missing or empty. The **Dune Docker Containers** dashboard is provisioned automatically. Prometheus and cAdvisor stay on internal Docker networks; only Grafana is published to the host. Keep port `3000` private on production hosts (default bind is `127.0.0.1`).
+
+If `docker-compose.monitoring.yml` exists and `GRAFANA_ADMIN_PASSWORD` is set, `install.sh` and `dune web` helpers include the overlay automatically alongside optional Traefik.
+
 ## Contributing & Project Notes
 
 - Issues, fixes, and improvements are welcome.

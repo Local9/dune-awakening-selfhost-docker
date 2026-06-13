@@ -7,6 +7,7 @@ services:
     container_name: redblink-dune-docker-console
     # Web UI: container port 8088, published to host 8088 by default.
     # Optional Traefik routing: see docker-compose.traefik.example.yml
+    # Optional Grafana monitoring: see docker-compose.monitoring.example.yml
     restart: unless-stopped
     networks:
       - dune-net

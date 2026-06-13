@@ -1,6 +1,7 @@
 # Local config / secrets
 .env
 docker-compose.traefik.yml
+docker-compose.monitoring.yml
 runtime/secrets/
 runtime/generated/
 runtime/backups/

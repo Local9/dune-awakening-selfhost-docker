@@ -1,0 +1,80 @@
+# Optional Grafana monitoring overlay for Dune Docker Console.
+#
+# Provides container CPU/memory/network metrics for dune-* containers via
+# cAdvisor + Prometheus + Grafana. Does not replace the Web UI health checks.
+#
+# Setup (manual, once):
+#   cp docker-compose.monitoring.example.yml docker-compose.monitoring.yml
+#   # GRAFANA_ADMIN_PASSWORD is required — Grafana will not start without it (see .env.example)
+#
+# Start (with the web console):
+#   docker compose -f docker-compose.web.yml -f docker-compose.monitoring.yml up -d --build
+#
+# Open Grafana at http://127.0.0.1:3000 (default). Sign in with GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD from .env.
+# Keep this port private on production hosts.
+
+services:
+  dune-cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: dune-cadvisor
+    restart: unless-stopped
+    privileged: true
+    networks:
+      - dune-monitoring
+    volumes:
+      - /:/rootfs:ro
+      - ${DUNE_CONTAINER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+
+  dune-prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: dune-prometheus
+    restart: unless-stopped
+    networks:
+      - dune-monitoring
+      - dune-net
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - dune-prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+
+  dune-grafana:
+    image: grafana/grafana:11.4.0
+    container_name: dune-grafana
+    restart: unless-stopped
+    depends_on:
+      - dune-prometheus
+    networks:
+      - dune-monitoring
+    ports:
+      - "${GRAFANA_BIND_HOST:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env before starting dune-grafana.}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3000}"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - dune-grafana-data:/var/lib/grafana
+
+networks:
+  dune-monitoring:
+    name: dune-monitoring
+  dune-net:
+    external: true
+    name: dune-net
+
+volumes:
+  dune-prometheus-data:
+  dune-grafana-data:

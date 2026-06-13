@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for docker-compose.web.yml (+ optional docker-compose.traefik.yml overlay).
+# Shared helpers for docker-compose.web.yml (+ optional compose overlays).
 
 ensure_dune_net() {
   docker network create dune-net 2>/dev/null || true
@@ -9,6 +9,9 @@ web_compose_file_args() {
   WEB_COMPOSE_FILE_ARGS=(-f docker-compose.web.yml)
   if [ -f docker-compose.traefik.yml ]; then
     WEB_COMPOSE_FILE_ARGS+=(-f docker-compose.traefik.yml)
+  fi
+  if [ -f docker-compose.monitoring.yml ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+    WEB_COMPOSE_FILE_ARGS+=(-f docker-compose.monitoring.yml)
   fi
 }
 
