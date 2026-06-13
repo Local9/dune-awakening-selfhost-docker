@@ -1,4 +1,4 @@
-import { assertIdentifier, intParam, isReadOnlySql, quoteIdentifier, quoteQualified, rowsResult } from "./db.js";
+import { assertIdentifier, intParam, isReadOnlySql, quoteIdentifier, quoteQualified, rowsResult } from "../core/db.js";
 
 export class UnsupportedCapabilityError extends Error {
   constructor(message, details = {}) {

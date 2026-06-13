@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { redact } from "./redact.js";
+import { redact } from "../core/redact.js";
 
 export const serviceAliases = new Map([
   ["postgres", "postgres"],

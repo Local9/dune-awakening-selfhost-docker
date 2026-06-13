@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLoginRateLimiter } from "../src/rateLimit.js";
+import { createLoginRateLimiter } from "../src/core/rateLimit.js";
 
 test("login rate limiter blocks repeated failures and resets after success", () => {
   let currentTime = 1000;

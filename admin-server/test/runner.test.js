@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildDuneArgs, dockerContainerForLogService, isReadOnlySql, parseVehicleList, validateServiceName } from "../src/runner.js";
-import { redact } from "../src/redact.js";
+import { buildDuneArgs, dockerContainerForLogService, isReadOnlySql, parseVehicleList, validateServiceName } from "../src/platform/runner.js";
+import { redact } from "../src/core/redact.js";
 
 test("validates known service names and aliases", () => {
   assert.equal(validateServiceName("gateway"), "gateway");

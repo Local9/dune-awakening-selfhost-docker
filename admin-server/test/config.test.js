@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig, publicConfig } from "../src/config.js";
+import { loadConfig, publicConfig } from "../src/core/config.js";
 
 test("web config exposes safe deployment flags and JSON body limit", () => {
   const repoRoot = mkdtempSync(join(tmpdir(), "arrakis-config-"));

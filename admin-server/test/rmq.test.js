@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildBroadcastCommand, buildCarePackageWhisperPayload, buildShutdownBroadcastCommand, publishCarePackageWhisper, validateBroadcastMessage, validateLocalizedTexts, validatePublishLabel } from "../src/rmq.js";
+import { buildBroadcastCommand, buildCarePackageWhisperPayload, buildShutdownBroadcastCommand, publishCarePackageWhisper, validateBroadcastMessage, validateLocalizedTexts, validatePublishLabel } from "../src/platform/rmq.js";
 
 test("builds verified ServiceBroadcast generic command payload", () => {
   const command = buildBroadcastCommand({ message: "Server event starts soon", durationSec: 45, title: "Event" });

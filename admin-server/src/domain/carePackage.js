@@ -1,9 +1,9 @@
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { buildDuneArgs, runDune } from "./runner.js";
+import { buildDuneArgs, runDune } from "../platform/runner.js";
 import { resolveCatalogItem } from "./adminCatalog.js";
-import { publishCarePackageWhisper } from "./rmq.js";
+import { publishCarePackageWhisper } from "../platform/rmq.js";
 import { giveItemToPlayer } from "./duneDb.js";
 
 const DEFAULT_KIT_ID = "care-package-v1";

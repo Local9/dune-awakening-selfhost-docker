@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TaskManager, taskTimeoutMs } from "../src/tasks.js";
+import { TaskManager, taskTimeoutMs } from "../src/platform/tasks.js";
 
 test("task manager creates and completes allowlisted dune tasks", async () => {
   const dir = mkdtempSync(join(tmpdir(), "arrakis-task-"));

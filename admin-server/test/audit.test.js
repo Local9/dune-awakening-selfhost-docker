@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { audit, recordAdminHistory } from "../src/audit.js";
+import { audit, recordAdminHistory } from "../src/core/audit.js";
 
 test("records safe web admin history rows for RMQ attempts", () => {
   const generatedDir = mkdtempSync(join(tmpdir(), "arrakis-history-"));

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Readable } from "node:stream";
-import { readJsonBody, safeStaticTarget } from "../src/httpSafety.js";
+import { readJsonBody, safeStaticTarget } from "../src/core/httpSafety.js";
 
 test("readJsonBody enforces request size limits", async () => {
   assert.deepEqual(await readJsonBody(Readable.from(["{\"ok\":true}"]), 100), { ok: true });

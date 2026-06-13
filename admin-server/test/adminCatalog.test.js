@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listCatalogItems, resolveCatalogItem } from "../src/adminCatalog.js";
+import { listCatalogItems, resolveCatalogItem } from "../src/domain/adminCatalog.js";
 
 function fixtureRepo() {
   const root = mkdtempSync(join(tmpdir(), "web-admin-catalog-"));
