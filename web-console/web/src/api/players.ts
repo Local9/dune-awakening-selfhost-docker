@@ -1,4 +1,4 @@
-import { api, post } from "./client";
+import { api, del, post } from "./client";
 import type { CapabilitiesResponse } from "./types";
 import type { Task } from "./setup";
 
@@ -49,5 +49,5 @@ export const playersApi = {
   resetTutorial: (playerId: string, body: { tutorialId: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/tutorials/reset`, body),
   repairGear: (playerId: string, confirmation: string) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/repair-gear`, { confirmation }),
   refuelVehicle: (playerId: string, body: { vehicleId: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/refuel-vehicle`, body),
-  deleteInventoryItem: (playerId: string, itemId: string, confirmation: string) => api<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/inventory/${encodeURIComponent(itemId)}`, { method: "DELETE", body: JSON.stringify({ confirmation }) })
+  deleteInventoryItem: (playerId: string, itemId: string, confirmation: string) => del<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/inventory/${encodeURIComponent(itemId)}`, { confirmation })
 };

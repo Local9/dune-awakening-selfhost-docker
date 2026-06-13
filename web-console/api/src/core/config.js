@@ -98,3 +98,17 @@ export function publicConfig(config) {
     mockMode: config.mockMode
   };
 }
+
+export function loginPublicConfig(config) {
+  return {
+    appName: config.appName,
+    authDisabled: config.authDisabled
+  };
+}
+
+export function authDisabledStartupWarnings() {
+  return [
+    "WARNING: ADMIN_AUTH_DISABLED=1 — web console authentication is DISABLED.",
+    "All /api/* routes are open without login. Do not expose this instance to untrusted networks."
+  ];
+}

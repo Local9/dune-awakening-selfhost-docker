@@ -1,4 +1,4 @@
-import { publicConfig } from "../core/config.js";
+import { loginPublicConfig, publicConfig } from "../core/config.js";
 import { setSessionCookie, clearSessionCookie, json } from "../core/auth.js";
 import { audit } from "../core/audit.js";
 import { loginRateLimitKey } from "../app/context.js";
@@ -9,7 +9,8 @@ export function registerAuthRoutes(router, ctx) {
 
   router.get("/api/auth/state", (req, res) => {
     const session = ctx.auth.readSession(req);
-    return json(res, 200, { authenticated: Boolean(session), csrfToken: session?.csrf || null, config: publicConfig(ctx.config) });
+    const config = session ? publicConfig(ctx.config) : loginPublicConfig(ctx.config);
+    return json(res, 200, { authenticated: Boolean(session), csrfToken: session?.csrf || null, config });
   }, { auth: false });
 
   router.post("/api/auth/login", async (req, res) => {

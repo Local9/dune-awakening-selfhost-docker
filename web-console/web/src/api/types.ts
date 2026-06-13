@@ -1,9 +1,12 @@
 import type { Task } from "./setup";
 
-export type PublicConfig = {
+export type LoginPublicConfig = {
   appName?: string;
-  repoRoot?: string;
   authDisabled?: boolean;
+};
+
+export type PublicConfig = LoginPublicConfig & {
+  repoRoot?: string;
   adminPasswordEnvManaged?: boolean;
   secureCookies?: boolean;
   allowHostBootstrap?: boolean;
@@ -13,7 +16,7 @@ export type PublicConfig = {
 export type AuthState = {
   authenticated: boolean;
   csrfToken: string | null;
-  config: PublicConfig;
+  config: LoginPublicConfig | PublicConfig;
 };
 
 export type SupportedResponse<T = Record<string, unknown>> = {

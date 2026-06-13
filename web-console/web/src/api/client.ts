@@ -49,6 +49,16 @@ export function post<T>(path: string, body: unknown = {}) {
   return api<T>(path, { method: "POST", body: JSON.stringify(body) });
 }
 
+export function patch<T>(path: string, body: unknown = {}) {
+  return api<T>(path, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function del<T>(path: string, body?: unknown) {
+  const options: RequestInit = { method: "DELETE" };
+  if (body !== undefined) options.body = JSON.stringify(body);
+  return api<T>(path, options);
+}
+
 export async function apiSupported<T>(path: string, options: RequestInit = {}): Promise<ApiSupportedResult<T>> {
   const headers = new Headers(options.headers);
   if (options.body && !(options.body instanceof FormData) && !headers.has("content-type")) headers.set("content-type", "application/json");

@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { authDisabledStartupWarnings } from "./core/config.js";
 import { createAppContext } from "./app/context.js";
 import { createRouter } from "./app/router.js";
 import { registerAllRoutes } from "./routes/index.js";
@@ -25,7 +25,9 @@ createServer(async (req, res) => {
   }
 }).listen(ctx.config.port, ctx.config.host, () => {
   console.log(`${ctx.config.appName} API listening on http://${ctx.config.host}:${ctx.config.port}`);
-  if (!ctx.config.authDisabled) {
+  if (ctx.config.authDisabled) {
+    for (const line of authDisabledStartupWarnings()) console.warn(line);
+  } else {
     console.log("Initial admin password is stored in runtime/secrets/admin-web-password.txt");
   }
   scheduleBootAutoStart(ctx);
