@@ -1,4 +1,4 @@
-FROM node:20-bookworm AS web-build
+FROM node:24-bookworm AS web-build
 WORKDIR /app/web
 RUN corepack enable
 COPY web/package.json web/pnpm-lock.yaml ./
@@ -6,7 +6,7 @@ RUN pnpm install --frozen-lockfile
 COPY web ./
 RUN pnpm run build
 
-FROM node:20-bookworm
+FROM node:24-bookworm
 WORKDIR /app
 ENV NODE_ENV=production
 

@@ -76,6 +76,19 @@ The installer downloads the latest release, prepares the server, starts the Web 
 - Keep secrets, generated runtime files, and backups out of git.
 - Do not expose the Web UI to untrusted users.
 
+### Development
+
+Local work on the web admin (`admin-server` and `web`) requires **Node.js 24 LTS**. The repo root `.nvmrc` pins `24` for `nvm`, `fnm`, or `volta`.
+
+```bash
+node --version          # expect v24.x
+corepack enable
+cd admin-server && pnpm install && pnpm test
+cd ../web && pnpm install && pnpm run build
+```
+
+Production installs via `install.sh` build the console through Docker and does not require Node on the host.
+
 ## Credits
 
 Dune Docker Console is created and maintained by RedBlink. You are welcome to use, fork, modify, and build on this project. If you share or redistribute it, please credit RedBlink as the original developer.
