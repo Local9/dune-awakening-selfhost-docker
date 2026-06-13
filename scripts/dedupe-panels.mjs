@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const panelsPath = join(root, "web", "src", "features", "panels.tsx");
+const panelsPath = join(root, "web-console", "web", "src", "features", "panels.tsx");
 let content = readFileSync(panelsPath, "utf8");
 
 // Remove duplicate lib functions (now imported from lib/*)

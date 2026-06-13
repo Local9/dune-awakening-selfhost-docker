@@ -2,7 +2,7 @@ services:
   redblink-dune-docker-console:
     build:
       context: .
-      dockerfile: admin-server/Dockerfile
+      dockerfile: web-console/Dockerfile
     image: redblink-dune-docker-console:dev
     container_name: redblink-dune-docker-console
     # Web UI: container port 8088, published to host 8088 by default.

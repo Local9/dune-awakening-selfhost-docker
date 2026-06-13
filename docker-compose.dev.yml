@@ -1,0 +1,24 @@
+# Optional dev overlay: Vite HMR on :5173 proxying /api to the console container.
+# Usage: docker compose -f docker-compose.web.yml -f docker-compose.dev.yml up --build
+services:
+  web-dev:
+    build:
+      context: ./web-console/web
+      dockerfile: Dockerfile
+      target: development
+    container_name: redblink-dune-docker-console-web-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web-console/web:/app
+      - web_node_modules:/app/node_modules
+    environment:
+      VITE_API_PROXY_TARGET: http://redblink-dune-docker-console:8088
+    networks:
+      - dune-net
+    depends_on:
+      redblink-dune-docker-console:
+        condition: service_healthy
+
+volumes:
+  web_node_modules:

@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const src = join(root, "web", "src");
+const src = join(root, "web-console", "web", "src");
 const appPath = join(src, "App.tsx");
 const backupPath = join(src, "App.tsx.bak");
 

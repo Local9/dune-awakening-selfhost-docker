@@ -104,15 +104,34 @@ If `docker-compose.monitoring.yml` exists and `GRAFANA_ADMIN_PASSWORD` is set, `
 
 ### Development and local QA
 
-Local work on the web admin (`admin-server` and `web`) requires **Node.js 24 LTS**. The repo root `.nvmrc` pins `24` for `nvm`, `fnm`, or `volta`.
+Production installs via `install.sh` (or `docker compose -f docker-compose.web.yml up -d --build`) build the React UI inside Docker automatically. **You do not need Node or a manual `web-console/web/dist` build on the host for production.**
 
-**Quick checks (any OS, no containers):**
+The browser admin panel lives in [`web-console/`](web-console/) (`api/` for the Node backend, `web/` for the React UI). Production builds use [`web-console/Dockerfile`](web-console/Dockerfile). For containerized Vite HMR, [`web-console/web/Dockerfile`](web-console/web/Dockerfile) provides `development` and `builder` targets.
+
+**Contributor workflows (optional host Node.js 24 LTS):**
+
+| Goal | Command |
+|------|---------|
+| API/unit tests only | `cd web-console/api && pnpm install && pnpm test` |
+| Web typecheck/build on host | `cd web-console/web && pnpm install && pnpm run typecheck && pnpm run build` |
+| Web HMR on host (API on `:8088`) | `cd web-console/web && pnpm install && pnpm dev` |
+| Web HMR in Docker (API in console container) | `docker compose -f docker-compose.web.yml -f docker-compose.dev.yml up --build` then open `http://127.0.0.1:5173` (API still on `:8088`) |
+
+The repo root [`.nvmrc`](.nvmrc) pins Node `24` for `nvm`, `fnm`, or `volta` when using host-native tooling.
+
+**Quick checks without containers (contributors):**
 
 ```bash
 node --version          # expect v24.x
 corepack enable
-cd admin-server && pnpm install && pnpm test
-cd ../web && pnpm install && pnpm run build
+cd web-console/api && pnpm install && pnpm test
+cd ../web && pnpm install && pnpm run typecheck && pnpm run build
+```
+
+**Standalone web image build (sanity check):**
+
+```bash
+docker build -f web-console/web/Dockerfile --target builder ./web-console/web
 ```
 
 **End-to-end production QA (full stack + admin panel):**
@@ -150,8 +169,6 @@ export DUNE_QA_FUNCOM_TOKEN="<your-funcom-token>"   # required for up / wait-rea
 **Windows notes:** The game stack requires a Linux container host (Podman Machine or WSL2). Bash scripts run via WSL or Git Bash. Set `DUNE_QA_BASH` to your `bash.exe` if needed. The QA script sets `DUNE_CONTAINER_SOCKET` and `DUNE_HOST_REPO_ROOT` automatically for Podman/Docker.
 
 **Timeouts:** `QA_PANEL_TIMEOUT_MS` (default 120000), `QA_STACK_TIMEOUT_MS` (default 600000), `QA_READY_TIMEOUT_MS` (default 7200000).
-
-Production installs via `install.sh` build the console through Docker and do not require Node on the host.
 
 ## Credits
 

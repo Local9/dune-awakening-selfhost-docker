@@ -1,0 +1,53 @@
+import { api, post } from "./client";
+import type { CapabilitiesResponse } from "./types";
+import type { Task } from "./setup";
+
+export type PlayerFeature = "progression" | "events" | "stats" | "history";
+
+export const playersApi = {
+  list: (q = "") => api<{ rows: Record<string, unknown>[]; capabilities: Record<string, unknown> }>(`/api/players${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  online: () => api<{ rows: Record<string, unknown>[]; capabilities: Record<string, unknown> }>("/api/players/online"),
+  profile: (playerId: string) => api<Record<string, unknown>>(`/api/players/${encodeURIComponent(playerId)}`),
+  inventory: (playerId: string) => api<CapabilitiesResponse>(`/api/players/${encodeURIComponent(playerId)}/inventory`),
+  currency: (playerId: string) => api<CapabilitiesResponse>(`/api/players/${encodeURIComponent(playerId)}/currency`),
+  factions: (playerId: string) => api<CapabilitiesResponse>(`/api/players/${encodeURIComponent(playerId)}/factions`),
+  specs: (playerId: string) => api<CapabilitiesResponse>(`/api/players/${encodeURIComponent(playerId)}/specs`),
+  position: (playerId: string) => api<Record<string, unknown>>(`/api/players/${encodeURIComponent(playerId)}/position`),
+  progression: (playerId: string) => api<CapabilitiesResponse>(`/api/players/${encodeURIComponent(playerId)}/progression`),
+  events: (playerId: string) => api<CapabilitiesResponse>(`/api/players/${encodeURIComponent(playerId)}/events`),
+  stats: (playerId: string) => api<CapabilitiesResponse>(`/api/players/${encodeURIComponent(playerId)}/stats`),
+  history: (playerId: string) => api<CapabilitiesResponse>(`/api/players/${encodeURIComponent(playerId)}/history`),
+  giveItem: (playerId: string, body: { itemName: string; quantity: number; durability?: number; quality?: number; grade?: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/give-item`, body),
+  giveItems: (playerId: string, items: { itemName?: string; itemId?: string; quantity: number; durability?: number; quality?: number; grade?: number }[], options: { historyScope?: string; historyFriendly?: string } = {}) => post<{ ok: boolean; results: Record<string, unknown>[] }>(`/api/players/${encodeURIComponent(playerId)}/give-items`, { items, ...options }),
+  giveTemplate: (playerId: string, template = "scout-ornithopter-mk6") => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/give-items`, { template }),
+  giveItemId: (playerId: string, body: { itemId: string; quantity: number; durability?: number; quality?: number; grade?: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/give-item-id`, body),
+  addXp: (playerId: string, amount: number) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/add-xp`, { amount }),
+  setSkillPoints: (playerId: string, points: number) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/set-skill-points`, { points }),
+  setSkillModule: (playerId: string, body: { module: string; level: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/set-skill-module`, body),
+  addSpecializationXp: (playerId: string, body: { trackType: string; amount: number; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/specializations/add-xp`, body),
+  grantMaxSpecialization: (playerId: string, body: { trackType: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/specializations/grant-max`, body),
+  resetSpecialization: (playerId: string, body: { trackType: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/specializations/reset`, body),
+  grantAllSpecializationKeystones: (playerId: string, confirmation: string) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/specializations/keystones/grant-all`, { confirmation }),
+  resetAllSpecializationKeystones: (playerId: string, confirmation: string) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/specializations/keystones/reset-all`, { confirmation }),
+  refillWater: (playerId: string, amount = 1000000) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/refill-water`, { amount }),
+  kick: (playerId: string) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/kick`),
+  teleport: (playerId: string, body: { x: number; y: number; z: number; yaw: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/teleport`, body),
+  spawnVehicle: (playerId: string, body: { vehicleId: string; template: string; offset: number }) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/spawn-vehicle`, body),
+  cleanInventory: (playerId: string, confirmation: string) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/clean-inventory`, { confirmation }),
+  resetProgression: (playerId: string, confirmation: string) => post<{ task: Task }>(`/api/players/${encodeURIComponent(playerId)}/reset-progression`, { confirmation }),
+  addCurrency: (playerId: string, body: { currencyId: number; amount: number; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/add-currency`, body),
+  addFactionReputation: (playerId: string, body: { factionId: number; amount: number; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/add-faction-reputation`, body),
+  addIntel: (playerId: string, body: { amount: number; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/add-intel`, body),
+  craftingRecipes: (playerId: string) => api<{ rows: Record<string, unknown>[]; capabilities: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/crafting-recipes`),
+  unlockCraftingRecipe: (playerId: string, body: { recipeId: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/crafting-recipes/unlock`, body),
+  researchItems: (playerId: string) => api<{ rows: Record<string, unknown>[]; capabilities: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/research-items`),
+  unlockResearchItem: (playerId: string, body: { itemKey: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/research-items/unlock`, body),
+  journey: (playerId: string) => api<{ rows: Record<string, unknown>; capabilities: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/journey`),
+  completeJourneyNode: (playerId: string, body: { nodeId: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/journey/complete`, body),
+  resetJourneyNode: (playerId: string, body: { nodeId: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/journey/reset`, body),
+  completeTutorial: (playerId: string, body: { tutorialId: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/tutorials/complete`, body),
+  resetTutorial: (playerId: string, body: { tutorialId: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/tutorials/reset`, body),
+  repairGear: (playerId: string, confirmation: string) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/repair-gear`, { confirmation }),
+  refuelVehicle: (playerId: string, body: { vehicleId: string; confirmation: string }) => post<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/refuel-vehicle`, body),
+  deleteInventoryItem: (playerId: string, itemId: string, confirmation: string) => api<{ supported: boolean; result?: Record<string, unknown>; reason?: string }>(`/api/players/${encodeURIComponent(playerId)}/inventory/${encodeURIComponent(itemId)}`, { method: "DELETE", body: JSON.stringify({ confirmation }) })
+};
