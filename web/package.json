@@ -4,24 +4,31 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.0.0 <25.0.0"
   },
-  "packageManager": "pnpm@11.1.2",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": ">=11.6.0 <12.0.0",
+      "onFail": "download"
+    }
+  },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --noEmit",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^6.0.2",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "typescript": "^5.7.3",
-    "vite": "^8.0.16"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.16",
-    "@types/react-dom": "^19.2.3"
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "^5.7.3",
+    "vite": "^8.0.16"
   }
 }

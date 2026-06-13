@@ -10,9 +10,15 @@
     "test": "node --test"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.0.0 <25.0.0"
   },
-  "packageManager": "pnpm@11.1.2",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": ">=11.6.0 <12.0.0",
+      "onFail": "download"
+    }
+  },
   "dependencies": {
     "pg": "^8.21.0"
   }
