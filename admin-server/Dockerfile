@@ -1,10 +1,10 @@
 FROM node:20-bookworm AS web-build
 WORKDIR /app/web
-COPY web/package.json ./
-COPY web/package-lock.json ./
-RUN npm ci
+RUN corepack enable
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY web ./
-RUN npm run build
+RUN pnpm run build
 
 FROM node:20-bookworm
 WORKDIR /app
@@ -19,9 +19,11 @@ RUN apt-get update \
         ca-certificates \
         curl \
         bash \
+        git \
         procps \
         netcat-openbsd \
     && rm -rf /var/lib/apt/lists/* \
+    && corepack enable \
     && arch="$(dpkg --print-architecture)" \
     && case "$arch" in \
         amd64) docker_arch="x86_64"; compose_arch="x86_64" ;; \
@@ -40,9 +42,8 @@ RUN apt-get update \
     && docker --version \
     && docker compose version
 
-COPY admin-server/package.json ./
-COPY admin-server/package-lock.json ./
-RUN npm ci --omit=dev
+COPY admin-server/package.json admin-server/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod
 COPY admin-server/src ./src
 COPY --from=web-build /app/web/dist /app/web-dist
 WORKDIR /repo

@@ -33,6 +33,11 @@ services:
       DUNE_DB_USER: "${DUNE_DB_USER:-}"
       DUNE_DB_PASSWORD: "${DUNE_DB_PASSWORD:-}"
       DUNE_COMMAND_AUTH_TOKEN: "${DUNE_COMMAND_AUTH_TOKEN:-}"
+      DUNE_SELF_UPDATE_MODE: "${DUNE_SELF_UPDATE_MODE:-}"
+      DUNE_SELF_UPDATE_REPO: "${DUNE_SELF_UPDATE_REPO:-}"
+      DUNE_SELF_UPDATE_REMOTE: "${DUNE_SELF_UPDATE_REMOTE:-}"
+      DUNE_SELF_UPDATE_BRANCH: "${DUNE_SELF_UPDATE_BRANCH:-}"
+      DUNE_SELF_UPDATE_TOKEN: "${DUNE_SELF_UPDATE_TOKEN:-}"
     volumes:
       - ./:/repo
       # WARNING: mounting the Docker socket gives this container broad control

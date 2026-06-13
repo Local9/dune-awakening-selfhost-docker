@@ -6,6 +6,7 @@
   "engines": {
     "node": ">=20.19.0"
   },
+  "packageManager": "pnpm@11.1.2",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",

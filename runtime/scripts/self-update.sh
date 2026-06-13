@@ -7,40 +7,277 @@ ROOT_DIR="$(pwd)"
 CURRENT_VERSION="dev"
 [ -f VERSION ] && CURRENT_VERSION="$(tr -d '[:space:]' < VERSION)"
 
-detect_github_repo() {
-  local remote
+REDBLINK_REPO="Red-Blink/dune-awakening-selfhost-docker"
 
+detect_release_github_repo() {
   if [ -n "${DUNE_SELF_UPDATE_REPO:-}" ]; then
     printf '%s\n' "$DUNE_SELF_UPDATE_REPO"
     return 0
   fi
-
-  if command -v git >/dev/null 2>&1; then
-    remote="$(git remote get-url origin 2>/dev/null || true)"
-    case "$remote" in
-      https://github.com/*)
-        remote="${remote#https://github.com/}"
-        remote="${remote%.git}"
-        printf '%s\n' "$remote"
-        return 0
-        ;;
-      git@github.com:*)
-        remote="${remote#git@github.com:}"
-        remote="${remote%.git}"
-        printf '%s\n' "$remote"
-        return 0
-        ;;
-    esac
-  fi
-
-  printf '%s\n' "Red-Blink/dune-awakening-selfhost-docker"
+  printf '%s\n' "$REDBLINK_REPO"
 }
 
-GITHUB_REPO="$(detect_github_repo)"
+GITHUB_REPO="$(detect_release_github_repo)"
 GITHUB_API_BASE="${DUNE_SELF_UPDATE_API_BASE:-https://api.github.com}"
 GITHUB_TOKEN="${DUNE_SELF_UPDATE_TOKEN:-}"
 LATEST_TAG_CACHE_FILE="runtime/generated/self-update-latest-tag.txt"
+UPDATE_MODE_CACHE_FILE="runtime/generated/self-update-mode.txt"
 API_LAST_STATUS=""
+
+normalize_github_repo_slug() {
+  local remote="${1:-}"
+  case "$remote" in
+    https://github.com/*)
+      remote="${remote#https://github.com/}"
+      remote="${remote%.git}"
+      ;;
+    git@github.com:*)
+      remote="${remote#git@github.com:}"
+      remote="${remote%.git}"
+      ;;
+    ssh://git@github.com/*)
+      remote="${remote#ssh://git@github.com/}"
+      remote="${remote%.git}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$remote"
+}
+
+origin_github_repo() {
+  local remote slug
+  command -v git >/dev/null 2>&1 || return 1
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  remote="$(git remote get-url origin 2>/dev/null || true)"
+  [ -n "$remote" ] || return 1
+  slug="$(normalize_github_repo_slug "$remote" 2>/dev/null || true)"
+  [ -n "$slug" ] || return 1
+  printf '%s\n' "$slug"
+}
+
+origin_is_redblink() {
+  local slug
+  slug="$(origin_github_repo 2>/dev/null || true)"
+  [ -n "$slug" ] || return 1
+  slug="${slug,,}"
+  [ "$slug" = "${REDBLINK_REPO,,}" ]
+}
+
+git_repo_with_origin() {
+  command -v git >/dev/null 2>&1 || return 1
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  git remote get-url origin >/dev/null 2>&1
+}
+
+resolve_update_mode() {
+  local mode="${DUNE_SELF_UPDATE_MODE:-auto}"
+  mode="$(printf '%s' "$mode" | tr '[:upper:]' '[:lower:]')"
+  case "$mode" in
+    releases|release)
+      printf '%s\n' "releases"
+      return 0
+      ;;
+    git)
+      printf '%s\n' "git"
+      return 0
+      ;;
+    auto|"")
+      if git_repo_with_origin && ! origin_is_redblink; then
+        printf '%s\n' "git"
+      else
+        printf '%s\n' "releases"
+      fi
+      return 0
+      ;;
+    *)
+      echo "Unsupported DUNE_SELF_UPDATE_MODE: $mode" >&2
+      echo "Supported values: auto, releases, git" >&2
+      return 2
+      ;;
+  esac
+}
+
+cache_update_mode() {
+  local mode="$1"
+  mkdir -p runtime/generated
+  printf '%s\n' "$mode" > "$UPDATE_MODE_CACHE_FILE"
+}
+
+read_cached_update_mode() {
+  [ -s "$UPDATE_MODE_CACHE_FILE" ] || return 1
+  tr -d '[:space:]' < "$UPDATE_MODE_CACHE_FILE"
+}
+
+resolve_git_remote() {
+  local remote="${DUNE_SELF_UPDATE_REMOTE:-origin}"
+  remote="$(printf '%s' "$remote" | tr -d '[:space:]')"
+  [ -n "$remote" ] || {
+    echo "DUNE_SELF_UPDATE_REMOTE is empty."
+    return 2
+  }
+  if ! git remote get-url "$remote" >/dev/null 2>&1; then
+    echo "Git remote not found: $remote"
+    echo
+    echo "Configured remotes:"
+    git remote -v 2>/dev/null | sed 's/^/  /' || true
+    echo
+    echo "Set DUNE_SELF_UPDATE_REMOTE to an existing remote, for example origin or fork."
+    return 2
+  fi
+  printf '%s\n' "$remote"
+}
+
+detect_git_branch() {
+  local remote="$1"
+  local branch="${DUNE_SELF_UPDATE_BRANCH:-}"
+  branch="$(printf '%s' "$branch" | tr -d '[:space:]')"
+  if [ -n "$branch" ]; then
+    printf '%s\n' "$branch"
+    return 0
+  fi
+  branch="$(
+    git symbolic-ref --quiet "refs/remotes/${remote}/HEAD" 2>/dev/null \
+      | sed "s|^refs/remotes/${remote}/||" || true
+  )"
+  if [ -n "$branch" ]; then
+    printf '%s\n' "$branch"
+    return 0
+  fi
+  printf '%s\n' "main"
+}
+
+short_sha() {
+  local sha="$1"
+  printf '%.7s' "$sha"
+}
+
+remote_branch_commit() {
+  local remote="$1"
+  local branch="$2"
+  git fetch --quiet "$remote" "$branch" 2>/dev/null || git fetch --quiet "$remote" 2>/dev/null || return 1
+  git rev-parse -q --verify "refs/remotes/${remote}/${branch}^{commit}" 2>/dev/null
+}
+
+local_branch_commit() {
+  git rev-parse HEAD 2>/dev/null
+}
+
+git_remote_url() {
+  local remote="$1"
+  git remote get-url "$remote" 2>/dev/null || true
+}
+
+check_git_pull_update() {
+  local remote branch remote_sha local_sha remote_url
+  remote="$(resolve_git_remote)" || exit 2
+  branch="$(detect_git_branch "$remote")"
+  remote_url="$(git_remote_url "$remote")"
+
+  echo "Detected fork origin — skipping GitHub releases."
+  echo "Update source: git remote ${remote}/${branch} (${remote_url})"
+  echo
+
+  remote_sha="$(remote_branch_commit "$remote" "$branch")" || {
+    echo "Could not fetch ${remote}/${branch}."
+    echo "Check network access and that the branch exists on the remote."
+    exit 2
+  }
+  local_sha="$(local_branch_commit)" || {
+    echo "Could not resolve the current Git commit."
+    exit 2
+  }
+
+  echo "Current stack version: $(short_sha "$local_sha") (git)"
+  echo "Latest release:        $(short_sha "$remote_sha") (git)"
+  echo "Git remote:            ${remote}/${branch}"
+  echo
+
+  if [ "$local_sha" = "$remote_sha" ]; then
+    echo "You are already on the latest stack commit."
+    exit 0
+  fi
+
+  if git merge-base --is-ancestor "$local_sha" "$remote_sha" 2>/dev/null; then
+    echo "A newer stack commit is available."
+    exit 100
+  fi
+
+  if git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+    echo "Local checkout is ahead of ${remote}/${branch}."
+    echo "Publish or reset locally if you expected to match the remote."
+    exit 0
+  fi
+
+  echo "Local checkout has diverged from ${remote}/${branch}."
+  echo "Applying the update will reset to the remote branch tip."
+  exit 100
+}
+
+install_git_pull_update() {
+  local remote branch remote_sha local_sha remote_url backup_dir target
+
+  remote="$(resolve_git_remote)" || exit 2
+  branch="$(detect_git_branch "$remote")"
+  remote_url="$(git_remote_url "$remote")"
+
+  check_dirty_git_tree
+
+  echo "Updating stack Git checkout from:"
+  echo "  ${remote_url}"
+  echo "Fetching branch: ${branch}"
+
+  remote_sha="$(remote_branch_commit "$remote" "$branch")" || {
+    echo "Could not fetch ${remote}/${branch}."
+    exit 2
+  }
+  local_sha="$(local_branch_commit)" || {
+    echo "Could not resolve the current Git commit."
+    exit 2
+  }
+  target="refs/remotes/${remote}/${branch}"
+
+  backup_dir="runtime/backups/self-update/$(date +%Y%m%d-%H%M%S)-git"
+  echo "Backing up current stack files to:"
+  echo "  $backup_dir"
+  backup_current_stack "$backup_dir"
+
+  echo "Resetting stack checkout to:"
+  echo "  ${remote}/${branch} ($(short_sha "$remote_sha"))"
+  git reset --hard "$target"
+
+  echo
+  echo "Installed stack commit: $(short_sha "$remote_sha") (git)"
+  echo "Previous stack files backup:"
+  echo "  $backup_dir/project-files.tgz"
+  echo
+  echo "Dune Docker Console files were updated."
+}
+
+list_git_remotes() {
+  local active="${DUNE_SELF_UPDATE_REMOTE:-origin}"
+  local remote url
+  echo "Active git remote: ${active}"
+  echo
+  while IFS= read -r remote; do
+    [ -n "$remote" ] || continue
+    url="$(git_remote_url "$remote")"
+    if [ "$remote" = "$active" ]; then
+      printf '* %s\t%s\n' "$remote" "$url"
+    else
+      printf '  %s\t%s\n' "$remote" "$url"
+    fi
+  done < <(git remote 2>/dev/null)
+}
+
+list_git_commit_rows() {
+  local remote branch
+  remote="$(resolve_git_remote)" || return 1
+  branch="$(detect_git_branch "$remote")"
+  git fetch --quiet "$remote" "$branch" 2>/dev/null || git fetch --quiet "$remote" 2>/dev/null || return 1
+  git log --no-decorate --pretty=format:'%h%x09%cs%x09%s' -n 20 "refs/remotes/${remote}/${branch}" 2>/dev/null
+}
 
 detect_host_repo_root() {
   local source
@@ -280,9 +517,34 @@ version_newer() {
 
 print_versions() {
   local latest="$1"
+  echo "Update source: Red-Blink GitHub releases"
   echo "Current stack version: $CURRENT_VERSION"
   echo "Latest release:        $latest"
   echo "GitHub repo:           $GITHUB_REPO"
+}
+
+check_release_update() {
+  local latest rc
+  set +e
+  latest="$(latest_release_tag)"
+  rc=$?
+  set -e
+
+  if [ "$rc" -ne 0 ] || [ -z "${latest:-}" ]; then
+    print_release_fetch_failure "check stack releases"
+    return 2
+  fi
+
+  cache_latest_release_tag "$latest"
+  print_versions "$latest"
+  echo
+  if version_newer "$CURRENT_VERSION" "$latest"; then
+    echo "A newer stack version is available."
+    return 100
+  fi
+
+  echo "You are already on the latest stack version."
+  return 0
 }
 
 check_dirty_git_tree() {
@@ -543,55 +805,23 @@ install_release_tag() {
   local tag="$1"
 
   check_dirty_git_tree
-
-  if git_worktree_available; then
-    install_release_tag_with_git "$tag"
-  else
-    install_release_tag_from_archive "$tag"
-  fi
+  install_release_tag_from_archive "$tag"
 }
 
-cmd="${1:-check}"
-tag="${2:-}"
-
-case "$cmd" in
-  check|status)
-    set +e
-    latest="$(latest_release_tag)"
-    rc=$?
-    set -e
-
-    if [ "$rc" -ne 0 ] || [ -z "${latest:-}" ]; then
-      print_release_fetch_failure "check stack releases"
-      exit 2
-    fi
-
-    cache_latest_release_tag "$latest"
-    print_versions "$latest"
-    echo
-    if version_newer "$CURRENT_VERSION" "$latest"; then
-      echo "A newer stack version is available."
-      exit 100
-    fi
-
-    echo "You are already on the latest stack version."
-    exit 0
-    ;;
-
-  list|releases)
-    if ! list_release_rows; then
-      print_release_fetch_failure "fetch stack releases"
-      exit 2
-    fi
-    ;;
-
-  install|apply)
-    if [ -z "$tag" ] || [ "$tag" = "latest" ]; then
+install_latest_for_mode() {
+  local mode="$1"
+  cache_update_mode "$mode"
+  case "$mode" in
+    git)
+      install_git_pull_update
+      ;;
+    releases)
+      local tag rc
       set +e
       tag="$(latest_release_tag)"
       rc=$?
       set -e
-      if [ "$rc" -ne 0 ] || [ -z "$tag" ]; then
+      if [ "$rc" -ne 0 ] || [ -z "${tag:-}" ]; then
         tag="$(read_cached_latest_release_tag 2>/dev/null || true)"
       fi
       if [ -z "$tag" ]; then
@@ -601,12 +831,93 @@ case "$cmd" in
             echo "GitHub API access was denied or rate-limited."
             ;;
           404)
-            echo "No published release could be resolved from the detected GitHub repo."
+            echo "No published release could be resolved from ${GITHUB_REPO}."
             ;;
         esac
         exit 2
       fi
-    elif [ "$tag" = "previous" ]; then
+      cache_latest_release_tag "$tag"
+      install_release_tag "$tag"
+      ;;
+    *)
+      echo "Unsupported update mode: $mode"
+      exit 2
+      ;;
+  esac
+  install_cli_command_after_update
+  rebuild_web_console_after_update
+}
+
+cmd="${1:-check}"
+tag="${2:-}"
+
+case "$cmd" in
+  check|status)
+    mode="$(resolve_update_mode)" || exit 2
+    cache_update_mode "$mode"
+    case "$mode" in
+      git)
+        check_git_pull_update
+        ;;
+      releases)
+        set +e
+        check_release_update
+        rc=$?
+        set -e
+        exit "$rc"
+        ;;
+    esac
+    ;;
+
+  list|releases)
+    mode="$(read_cached_update_mode 2>/dev/null || true)"
+    if [ -z "$mode" ]; then
+      mode="$(resolve_update_mode)" || exit 2
+    fi
+    case "$mode" in
+      git)
+        if ! list_git_commit_rows; then
+          echo "Could not list commits for the configured git remote/branch."
+          exit 2
+        fi
+        ;;
+      releases)
+        if ! list_release_rows; then
+          print_release_fetch_failure "fetch stack releases"
+          exit 2
+        fi
+        ;;
+    esac
+    ;;
+
+  remotes)
+    git_repo_with_origin || {
+      echo "This command requires a Git repository with a configured origin remote."
+      exit 2
+    }
+    list_git_remotes
+    ;;
+
+  install|apply)
+    mode="$(resolve_update_mode)" || exit 2
+    cache_update_mode "$mode"
+
+    if [ "$mode" = "git" ]; then
+      if [ -n "$tag" ] && [ "$tag" != "latest" ]; then
+        echo "Git-based stack updates only support: install latest"
+        echo "Use stack backup restore to roll back to a previous snapshot."
+        exit 2
+      fi
+      install_latest_for_mode "git"
+      exit 0
+    fi
+
+    if [ -z "$tag" ] || [ "$tag" = "latest" ]; then
+      install_latest_for_mode "releases"
+      exit 0
+    fi
+
+    if [ "$tag" = "previous" ]; then
       set +e
       tag="$(previous_release_tag)"
       rc=$?
@@ -618,6 +929,7 @@ case "$cmd" in
       fi
     fi
 
+    cache_update_mode "releases"
     cache_latest_release_tag "$tag"
     install_release_tag "$tag"
     install_cli_command_after_update
@@ -628,7 +940,12 @@ case "$cmd" in
     echo "Usage:"
     echo "  runtime/scripts/self-update.sh check"
     echo "  runtime/scripts/self-update.sh list"
+    echo "  runtime/scripts/self-update.sh remotes"
     echo "  runtime/scripts/self-update.sh install [latest|previous|<tag>]"
+    echo
+    echo "Update mode is auto-detected from git origin unless DUNE_SELF_UPDATE_MODE is set."
+    echo "  Red-Blink origin  -> GitHub releases"
+    echo "  Fork origin       -> git pull latest from DUNE_SELF_UPDATE_REMOTE (default origin)"
     exit 2
     ;;
 esac

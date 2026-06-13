@@ -3083,8 +3083,8 @@ function parseUpdateTask(task: Task) {
   if (task.status !== "succeeded") return { status: "Checking...", current: "", latest: "", reason: task.progressMessage || "" };
   const current = firstVersionMatch(text, [/current(?: stack)?(?: build| version)?\s*[:=]\s*([^\n]+)/i, /installed(?: build| version)?\s*[:=]\s*([^\n]+)/i, /local(?: build| version)?\s*[:=]\s*([^\n]+)/i]);
   const latest = firstVersionMatch(text, [/latest(?: release| build| version)?\s*[:=]\s*([^\n]+)/i, /remote(?: build| version)?\s*[:=]\s*([^\n]+)/i, /available(?: build| version)?\s*[:=]\s*([^\n]+)/i]);
-  const updateAvailable = /update available|newer|can update|available update/i.test(text);
-  const latestStatus = /up to date|already latest|no update|latest/i.test(text) && !updateAvailable;
+  const updateAvailable = /update available|newer stack (?:version|commit)|newer|can update|available update|diverged from/i.test(text);
+  const latestStatus = /up to date|already latest|already on the latest stack commit|no update|latest stack commit|you are already on the latest/i.test(text) && !updateAvailable;
   if (sameUpdateVersion(current, latest)) return { status: "Latest", current, latest, reason: summarizeCommandText(text) };
   if (updateAvailable) return { status: "Update Available", current, latest, reason: summarizeCommandText(text) };
   if (latestStatus) return { status: "Latest", current, latest, reason: summarizeCommandText(text) };
@@ -3330,10 +3330,13 @@ function stackUpdatePercent(text: string) {
 }
 
 function friendlyStackUpdateMessage(text: string, latestLine: string) {
+  if (/Detected fork origin/i.test(text)) return "Pulling the latest console commit from the configured git remote.";
+  if (/Fetching branch:/i.test(text)) return "Fetching the latest commit from the configured git branch.";
+  if (/Resetting stack checkout to:/i.test(text)) return "Resetting the local checkout to the latest remote commit.";
   if (/Downloading stack release/i.test(text)) return "Downloading the selected console release.";
   if (/Backing up current stack files/i.test(text)) return "Backing up the current console files before replacing them.";
   if (/Installing stack release into/i.test(text)) return "Installing the downloaded console release files.";
-  if (/Installed stack version/i.test(text)) return "Verifying the installed console version.";
+  if (/Installed stack version/i.test(text) || /Installed stack commit:/i.test(text)) return "Verifying the installed console update.";
   if (/Rebuilding Dune Docker Console/i.test(text)) return "Rebuilding and restarting the web console container.";
   if (/Dune Docker Console was rebuilt/i.test(text)) return "The web console container was rebuilt successfully.";
   if (/Previous stack files backup/i.test(text)) return "Finishing the console update and recording the backup location.";
@@ -3351,6 +3354,8 @@ function summarizeStackUpdateStage(lines: string[]) {
   const backupIndex = latestIndex(/^Backing up current stack files to:/i);
   const installIndex = latestIndex(/^Installing stack release into:/i);
   const installedIndex = latestIndex(/^Installed stack version:\s*/i);
+  const installedCommitIndex = latestIndex(/^Installed stack commit:/i);
+  const resetIndex = latestIndex(/^Resetting stack checkout to:/i);
   const backupDoneIndex = latestIndex(/^Previous stack files backup:/i);
   const downloadIndex = latestIndex(/^Downloading stack release:\s*/i);
   const dirtyIndex = latestIndex(/^Local repo has uncommitted tracked changes\./i);
@@ -3359,9 +3364,14 @@ function summarizeStackUpdateStage(lines: string[]) {
     const backupFile = nextIndentedLine(cleanLines, backupDoneIndex);
     return { title: "Finishing Console Update", percent: 94, message: backupFile ? `Recorded backup at ${backupFile}.` : "Recording the previous console backup location." };
   }
-  if (installedIndex >= 0) {
-    const version = cleanLines[installedIndex].trim().replace(/^Installed stack version:\s*/i, "").trim();
-    return { title: "Verifying Console Version", percent: 88, message: version ? `Installed console version ${version}. Verifying the update before finishing.` : "Verifying the installed console version." };
+  if (installedIndex >= 0 || installedCommitIndex >= 0) {
+    const line = cleanLines[installedIndex >= 0 ? installedIndex : installedCommitIndex].trim();
+    const label = line.replace(/^Installed stack (?:version|commit):\s*/i, "").trim();
+    return { title: "Verifying Console Update", percent: 88, message: label ? `Installed console update ${label}. Finishing the update.` : "Verifying the installed console update." };
+  }
+  if (resetIndex >= 0) {
+    const target = nextIndentedLine(cleanLines, resetIndex);
+    return { title: "Pulling Latest Commit", percent: 66, message: target ? `Resetting the checkout to ${target}.` : "Resetting the checkout to the latest remote commit." };
   }
   if (installIndex >= 0) {
     const target = nextIndentedLine(cleanLines, installIndex);
@@ -3389,6 +3399,11 @@ function nextIndentedLine(lines: string[], index: number) {
 function friendlyStackUpdateLine(line: string) {
   if (/^Running selfUpdateApply$/i.test(line)) return "Preparing the console update.";
   if (/^Task started$/i.test(line)) return "Preparing the console update.";
+  if (/^Update source: git remote/i.test(line)) return "Using git pull-latest for this fork clone.";
+  if (/^Detected fork origin/i.test(line)) return "Fork origin detected; checking the latest git commit instead of GitHub releases.";
+  if (/^Update source: Red-Blink GitHub releases/i.test(line)) return "Using Red-Blink GitHub releases for this update check.";
+  if (/^Fetching branch:/i.test(line)) return "Fetching the latest commit from the configured git branch.";
+  if (/^Resetting stack checkout to:/i.test(line)) return "Resetting the local checkout to the latest remote commit.";
   if (/Could not|failed|denied|rate-limited/i.test(line)) return line;
   return "Working on the console update.";
 }

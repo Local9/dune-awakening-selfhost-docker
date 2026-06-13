@@ -47,6 +47,26 @@ test("game update check exit 100 is treated as update-available success", async 
   assert.match(task.logLines.map((line) => line.line).join("\n"), /Update available/);
 });
 
+test("stack update check exit 100 is treated as update-available success", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "arrakis-task-stack-update-"));
+  const duneScript = join(dir, "dune");
+  writeFileSync(duneScript, "#!/usr/bin/env bash\necho 'Current stack version: v1.0.0'\necho 'Latest release: v1.1.0'\necho 'A newer stack version is available.'\nexit 100\n", { mode: 0o700 });
+  chmodSync(duneScript, 0o700);
+
+  const manager = new TaskManager({
+    duneScript,
+    repoRoot: dir,
+    taskRetention: 20,
+    commandTimeoutMs: 5000
+  });
+
+  const created = manager.create("updates", "selfUpdateCheck", {});
+  const task = await waitForTask(manager, created.id);
+  assert.equal(task.status, "succeeded");
+  assert.equal(task.exitCode, 100);
+  assert.match(task.logLines.map((line) => line.line).join("\n"), /newer stack version is available/);
+});
+
 test("long-running server tasks get an extended timeout", () => {
   const config = { commandTimeoutMs: 5000 };
 

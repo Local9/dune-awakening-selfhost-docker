@@ -228,6 +228,9 @@ EOF
 
   self-update|stack-update)
     shift || true
+    set -a
+    [ -f .env ] && . ./.env
+    set +a
     runtime/scripts/self-update.sh "$@"
     ;;
 
@@ -305,7 +308,7 @@ Usage:
   dune logs <service> [--raw]
   dune restart <service>
   dune update [check|auto enable|auto disable|auto status|--yes]
-  dune self-update [check|list|install [latest|previous|<tag>]]
+  dune self-update [check|list|remotes|install [latest|previous|<tag>]]
   dune restart-schedule [enable <HH:MM> [notify-minutes]|disable|status]
   dune db backup [output-dir]
   dune db list

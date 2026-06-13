@@ -217,7 +217,8 @@ choose_stack_release_to_install() {
 
   if [ "$rc" -ne 0 ] || [ "${#rows[@]}" -eq 0 ]; then
     echo "Could not fetch stack releases from GitHub."
-    echo "Make sure the detected GitHub repo is correct and that published releases exist."
+    echo "Fork clones use git pull-latest instead of GitHub releases when origin is not Red-Blink."
+    echo "Run '$DUNE self-update check' to compare against your configured git remote."
     echo "If GitHub API rate limiting is the issue, set DUNE_SELF_UPDATE_TOKEN."
     return 1
   fi
@@ -4019,12 +4020,16 @@ updates_menu() {
         set -e
         if [ "$rc" -eq 100 ]; then
           echo
-          if confirm "Install the latest stack version now?"; then
+          if confirm "Install the latest console update now?"; then
             run_cmd "$DUNE" self-update install latest
           fi
         elif [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
           echo
           echo "Command exited with status $rc."
+        elif [ "$rc" -eq 2 ]; then
+          echo
+          echo "If this is a fork clone, make sure git can reach your remote and set DUNE_SELF_UPDATE_REMOTE if needed."
+          echo "Run '$DUNE self-update remotes' to list configured git remotes."
         fi
         pause
         ;;
