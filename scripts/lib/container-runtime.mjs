@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { homedir, platform } from "node:os";
+import { platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -32,38 +32,74 @@ export function normalizeComposePath(path) {
   return resolved;
 }
 
-export async function tryCliInfo(cli) {
-  try {
-    await execFileAsync(cli, ["info"], { timeout: 8000, windowsHide: true });
-    return true;
-  } catch {
-    return false;
+const WIN32_CLI_PATHS = {
+  podman: [
+    "C:\\Program Files\\RedHat\\Podman\\podman.exe",
+    "C:\\Program Files\\Podman\\podman.exe"
+  ],
+  docker: [
+    "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe"
+  ]
+};
+
+export function pickContainerCli({ podmanOk, dockerOk }) {
+  if (podmanOk) return "podman";
+  if (dockerOk) return "docker";
+  throw new Error("No working container CLI found. Install Docker or Podman and ensure the daemon is running.");
+}
+
+export async function tryCliInfo(cli, env = process.env) {
+  const executable = await tryCliExecutable(cli, env);
+  return executable ? cli : "";
+}
+
+async function tryCliExecutable(cli, env = process.env) {
+  const candidates = [cli];
+  if (platform() === "win32" && WIN32_CLI_PATHS[cli]) {
+    candidates.push(...WIN32_CLI_PATHS[cli]);
   }
+  for (const candidate of candidates) {
+    try {
+      await execFileAsync(candidate, ["info"], { timeout: 8000, windowsHide: true, env });
+      return candidate;
+    } catch {
+      // try next candidate
+    }
+  }
+  return "";
 }
 
 export async function resolveContainerCli(env = process.env) {
   if (env.DUNE_CONTAINER_CLI) {
     const cli = env.DUNE_CONTAINER_CLI.trim();
-    if (!await tryCliInfo(cli)) {
+    const executable = await tryCliExecutable(cli, env);
+    if (!executable) {
       throw new Error(`DUNE_CONTAINER_CLI=${cli} is set but ${cli} info failed.`);
     }
-    return cli;
+    return { name: cli.replace(/\\+/g, "/").split("/").pop()?.replace(/\.exe$/i, "") || cli, executable };
   }
-  if (await tryCliInfo("docker")) return "docker";
-  if (await tryCliInfo("podman")) return "podman";
-  throw new Error("No working container CLI found. Install Docker or Podman and ensure the daemon is running.");
+  const podmanExecutable = await tryCliExecutable("podman", env);
+  const dockerExecutable = await tryCliExecutable("docker", env);
+  const name = pickContainerCli({
+    podmanOk: Boolean(podmanExecutable),
+    dockerOk: Boolean(dockerExecutable)
+  });
+  return {
+    name,
+    executable: name === "podman" ? podmanExecutable : dockerExecutable
+  };
 }
 
-export async function resolveContainerSocket(cli, env = process.env) {
+export async function resolveContainerSocket(cliName, env = process.env, executable = cliName) {
   if (env.DUNE_CONTAINER_SOCKET) {
     return env.DUNE_CONTAINER_SOCKET;
   }
   if (platform() === "win32") {
-    const podmanSocket = await tryPodmanMachineSocket(cli);
+    const podmanSocket = await tryPodmanMachineSocket(cliName, executable);
     if (podmanSocket) return podmanSocket;
     return "\\\\.\\pipe\\docker_engine";
   }
-  if (cli === "podman" || env.XDG_RUNTIME_DIR) {
+  if (cliName === "podman" || env.XDG_RUNTIME_DIR) {
     const runtimeDir = env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`;
     const podmanSock = `${runtimeDir}/podman/podman.sock`;
     if (existsSync(podmanSock)) return podmanSock;
@@ -72,10 +108,10 @@ export async function resolveContainerSocket(cli, env = process.env) {
   return "/var/run/docker.sock";
 }
 
-async function tryPodmanMachineSocket(cli) {
-  if (cli !== "podman") return "";
+async function tryPodmanMachineSocket(cliName, executable = cliName) {
+  if (cliName !== "podman") return "";
   try {
-    const { stdout } = await execFileAsync(cli, [
+    const { stdout } = await execFileAsync(executable, [
       "machine",
       "inspect",
       "--format",
@@ -94,20 +130,20 @@ export function buildComposeEnv(repoRoot, runtime) {
   ...process.env,
   DUNE_HOST_REPO_ROOT: hostRoot,
   DUNE_CONTAINER_SOCKET: runtime.socket,
-  DUNE_CONTAINER_CLI: runtime.cli
+  DUNE_CONTAINER_CLI: runtime.executable
   };
 }
 
 export async function detectRuntime(repoRoot = REPO_ROOT, env = process.env) {
-  const cli = await resolveContainerCli(env);
-  const socket = await resolveContainerSocket(cli, env);
+  const { name, executable } = await resolveContainerCli(env);
+  const socket = await resolveContainerSocket(name, env, executable);
   const hostRepoRoot = normalizeComposePath(repoRoot);
-  return { cli, socket, hostRepoRoot };
+  return { cli: name, executable, socket, hostRepoRoot };
 }
 
-export async function ensureDuneNet(cli) {
+export async function ensureDuneNet(executable) {
   try {
-    await execFileAsync(cli, ["network", "create", DUNE_NET], { timeout: 15000, windowsHide: true });
+    await execFileAsync(executable, ["network", "create", DUNE_NET], { timeout: 15000, windowsHide: true });
   } catch (error) {
     const message = String(error.stderr || error.message || error);
     if (!/already exists/i.test(message)) {
@@ -116,17 +152,17 @@ export async function ensureDuneNet(cli) {
   }
 }
 
-export async function listRunningContainers(cli) {
-  const { stdout } = await execFileAsync(cli, ["ps", "--format", "{{.Names}}"], {
+export async function listRunningContainers(executable) {
+  const { stdout } = await execFileAsync(executable, ["ps", "--format", "{{.Names}}"], {
     timeout: 15000,
     windowsHide: true
   });
   return stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
-export async function getContainerState(cli, name) {
+export async function getContainerState(executable, name) {
   try {
-    const { stdout } = await execFileAsync(cli, [
+    const { stdout } = await execFileAsync(executable, [
       "inspect",
       "--format",
       "{{.State.Status}}",
@@ -138,11 +174,11 @@ export async function getContainerState(cli, name) {
   }
 }
 
-export async function waitForContainers(cli, names, timeoutMs) {
+export async function waitForContainers(executable, names, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   const missing = new Set(names);
   while (Date.now() < deadline) {
-    const running = await listRunningContainers(cli);
+    const running = await listRunningContainers(executable);
     for (const name of names) {
       if (running.includes(name)) missing.delete(name);
     }
@@ -152,9 +188,9 @@ export async function waitForContainers(cli, names, timeoutMs) {
   return { ok: false, missing: [...missing] };
 }
 
-export async function fetchContainerLogs(cli, name, tail = 50) {
+export async function fetchContainerLogs(executable, name, tail = 50) {
   try {
-    const { stdout } = await execFileAsync(cli, ["logs", "--tail", String(tail), name], {
+    const { stdout } = await execFileAsync(executable, ["logs", "--tail", String(tail), name], {
       timeout: 15000,
       windowsHide: true
     });
@@ -165,7 +201,7 @@ export async function fetchContainerLogs(cli, name, tail = 50) {
 }
 
 export function runCompose(args, env, cwd = REPO_ROOT) {
-  const cli = env.DUNE_CONTAINER_CLI || "docker";
+  const cli = env.DUNE_CONTAINER_CLI || "podman";
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(cli, ["compose", ...args], {
       cwd,

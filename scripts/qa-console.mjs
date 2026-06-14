@@ -2,14 +2,19 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { resolve } from "node:path";
 import { runBash } from "./lib/bash-runner.mjs";
+import {
+  prepareContainerRuntime,
+  startConsoleContainer,
+  waitForConsoleHealth
+} from "./lib/console-install.mjs";
 import { resolveQaFuncomToken } from "./lib/qa-token.mjs";
+import { requireWslDelegation } from "./lib/wsl-path.mjs";
 import {
   CONSOLE_CONTAINER,
   CORE_STACK_CONTAINERS,
   REPO_ROOT,
   buildComposeEnv,
   detectRuntime,
-  ensureDuneNet,
   fetchContainerLogs,
   getContainerState,
   listRunningContainers,
@@ -37,6 +42,8 @@ const paths = {
   serverCatalog: resolve(REPO_ROOT, "runtime/generated/server-catalog.json"),
   partitionCatalog: resolve(REPO_ROOT, "runtime/generated/partition-catalog.json")
 };
+
+requireWslDelegation();
 
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
@@ -81,6 +88,9 @@ Usage:
   node scripts/qa-console.mjs logs [--stack]
   node scripts/qa-console.mjs check
   node scripts/qa-console.mjs wait-ready
+  .\\scripts\\qa-console.ps1 up
+
+On Windows, use scripts\\qa-console.ps1 (delegates into WSL2).
 
 Environment:
   DUNE_QA_FUNCOM_TOKEN     Required for up and wait-ready (.env or env var; no action if unset)
@@ -92,10 +102,15 @@ Environment:
 
 async function cmdUp() {
   const qaToken = requireQaFuncomToken();
-  console.log("=== QA: detecting container runtime ===");
-  const runtime = await detectRuntime();
+  console.log("=== QA: checking Python ===");
+  await ensurePythonPrereqs();
+  console.log("=== QA: preparing container runtime ===");
+  const runtime = await prepareContainerRuntime();
+  console.log(`Container CLI: ${runtime.cli}`);
+  if (runtime.socket) {
+    console.log(`Container socket: ${runtime.socket}`);
+  }
   const composeEnv = buildComposeEnv(REPO_ROOT, runtime);
-  await ensureDuneNet(runtime.cli);
 
   console.log("=== QA: bootstrap setup (non-destructive) ===");
   await bootstrapSetup(composeEnv, qaToken);
@@ -104,15 +119,23 @@ async function cmdUp() {
   await ensureStack(composeEnv);
 
   console.log("=== QA: starting production admin console ===");
-  await runCompose([...COMPOSE_FILES, "up", "-d", "--build", CONSOLE_CONTAINER], composeEnv);
+  await startConsoleContainer(runtime, { qa: true });
 
   console.log("=== QA: verifying admin panel ===");
-  await verifyAdminPanel(runtime.cli);
+  try {
+    await waitForConsoleHealth(runtime.executable, {
+      panelUrl: PANEL_URL,
+      timeoutMs: PANEL_TIMEOUT_MS,
+      checkUi: true
+    });
+  } catch (error) {
+    await failPhase("admin panel", runtime.executable, CONSOLE_CONTAINER, error.message);
+  }
 
   console.log("=== QA: verifying core stack ===");
-  const stack = await waitForContainers(runtime.cli, CORE_STACK_CONTAINERS, STACK_TIMEOUT_MS);
+  const stack = await waitForContainers(runtime.executable, CORE_STACK_CONTAINERS, STACK_TIMEOUT_MS);
   if (!stack.ok) {
-    await failPhase("core stack", runtime.cli, CONSOLE_CONTAINER, `Missing containers: ${stack.missing.join(", ")}`);
+    await failPhase("core stack", runtime.executable, CONSOLE_CONTAINER, `Missing containers: ${stack.missing.join(", ")}`);
   }
 
   console.log("=== QA: API smoke checks ===");
@@ -147,24 +170,24 @@ async function cmdLogs(stack) {
   if (stack) {
     for (const name of CORE_STACK_CONTAINERS) {
       console.log(`\n--- ${name} ---`);
-      console.log(await fetchContainerLogs(runtime.cli, name, 80));
+      console.log(await fetchContainerLogs(runtime.executable, name, 80));
     }
     return;
   }
-  console.log(await fetchContainerLogs(runtime.cli, CONSOLE_CONTAINER, 200));
+  console.log(await fetchContainerLogs(runtime.executable, CONSOLE_CONTAINER, 200));
 }
 
 async function cmdCheck() {
   try {
-    const runtime = await detectRuntime();
+    const runtime = await prepareContainerRuntime();
     console.log(`Container CLI: ${runtime.cli}`);
     console.log(`Socket: ${runtime.socket}`);
     console.log(`Host repo root: ${runtime.hostRepoRoot}`);
     console.log(`Setup files: env=${existsSync(paths.env)} token=${existsSync(paths.token)} battlegroup=${existsSync(paths.battlegroup)}`);
-    const running = await listRunningContainers(runtime.cli);
+    const running = await listRunningContainers(runtime.executable);
     const core = CORE_STACK_CONTAINERS.filter((name) => running.includes(name));
     console.log(`Core stack running (${core.length}/${CORE_STACK_CONTAINERS.length}): ${core.join(", ") || "none"}`);
-    const panelState = await getContainerState(runtime.cli, CONSOLE_CONTAINER);
+    const panelState = await getContainerState(runtime.executable, CONSOLE_CONTAINER);
     console.log(`Console container: ${panelState || "not found"}`);
     const health = await pollHttp(`${PANEL_URL}/api/health`, { timeoutMs: 5000, intervalMs: 500 });
     console.log(`Admin /api/health: ${health.ok ? "ok" : health.error || "failed"}`);
@@ -176,6 +199,7 @@ async function cmdCheck() {
 
 async function cmdWaitReady() {
   requireQaFuncomToken();
+  await ensurePythonPrereqs();
   const composeEnv = buildComposeEnv(REPO_ROOT, await detectRuntime());
   const deadline = Date.now() + READY_TIMEOUT_MS;
   console.log("Waiting for dune ready (this can take a long time on first install)...");
@@ -193,7 +217,7 @@ async function cmdWaitReady() {
     }
     await sleep(30000);
   }
-  await failPhase("dune ready", (await detectRuntime()).cli, "dune-director", "Timed out waiting for dune ready");
+  await failPhase("dune ready", (await detectRuntime()).executable, "dune-director", "Timed out waiting for dune ready");
 }
 
 function isSetupComplete() {
@@ -213,6 +237,14 @@ function requireQaFuncomToken() {
     process.exit(1);
   }
   return token;
+}
+
+async function ensurePythonPrereqs() {
+  try {
+    await runBash("runtime/scripts/python-env.sh", []);
+  } catch (error) {
+    process.exit(1);
+  }
 }
 
 async function bootstrapSetup(composeEnv, qaToken) {
@@ -250,7 +282,7 @@ async function bootstrapSetup(composeEnv, qaToken) {
 
 async function ensureStack(composeEnv) {
   const runtime = await detectRuntime();
-  const running = await listRunningContainers(runtime.cli);
+  const running = await listRunningContainers(runtime.executable);
   const missing = CORE_STACK_CONTAINERS.filter((name) => !running.includes(name));
   if (missing.length === 0) {
     console.log("Core stack already running.");
@@ -261,40 +293,9 @@ async function ensureStack(composeEnv) {
     ...bashEnv(composeEnv),
     DUNE_IGNORE_MANUAL_STOP: "1"
   });
-  const wait = await waitForContainers(runtime.cli, CORE_STACK_CONTAINERS, STACK_TIMEOUT_MS);
+  const wait = await waitForContainers(runtime.executable, CORE_STACK_CONTAINERS, STACK_TIMEOUT_MS);
   if (!wait.ok) {
-    await failPhase("stack start", runtime.cli, missing[0] || "dune-postgres", `Still missing: ${wait.missing.join(", ")}`);
-  }
-}
-
-async function verifyAdminPanel(cli) {
-  const state = await getContainerState(cli, CONSOLE_CONTAINER);
-  if (state !== "running") {
-    await failPhase("admin panel", cli, CONSOLE_CONTAINER, `Container state: ${state || "missing"}`);
-  }
-
-  const health = await pollHttp(`${PANEL_URL}/api/health`, {
-    timeoutMs: PANEL_TIMEOUT_MS,
-    validate: async (res) => {
-      if (!res.ok) return false;
-      const body = await res.json();
-      return body?.ok === true;
-    }
-  });
-  if (!health.ok) {
-    await failPhase("admin panel health", cli, CONSOLE_CONTAINER, health.error || "health check failed");
-  }
-
-  const ui = await pollHttp(`${PANEL_URL}/`, {
-    timeoutMs: 30000,
-    validate: async (res) => {
-      if (!res.ok) return false;
-      const body = await res.text();
-      return /<!doctype html/i.test(body);
-    }
-  });
-  if (!ui.ok) {
-    await failPhase("admin panel UI", cli, CONSOLE_CONTAINER, ui.error || "static UI check failed");
+    await failPhase("stack start", runtime.executable, missing[0] || "dune-postgres", `Still missing: ${wait.missing.join(", ")}`);
   }
 }
 

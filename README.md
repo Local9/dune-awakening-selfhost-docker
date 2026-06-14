@@ -68,6 +68,44 @@ bash -c 'set -euo pipefail; if ! command -v curl >/dev/null 2>&1; then sudo apt-
 
 The installer downloads the latest release, prepares the server, starts the Web UI, and tells you what address to open in your browser. If you are on the same network as the server, use the same-network address. If you are connecting over the internet, use the public address and allow TCP `8088` in your firewall.
 
+### Windows (WSL2)
+
+`install.sh` is Linux-only. On Windows, use **WSL2 with Ubuntu**. PowerShell bootstraps WSL and runs the same Linux scripts inside it (no Git Bash / host Podman required).
+
+**Prerequisites:** WSL2 enabled, Ubuntu installed (`wsl --install -d Ubuntu` if needed).
+
+**Web UI only:**
+
+```powershell
+.\install.ps1
+```
+
+Or double-click `install.cmd`. First run provisions WSL (Python 3, Podman or Docker, Node 24) via [`runtime/scripts/wsl-provision.sh`](runtime/scripts/wsl-provision.sh). Open **http://127.0.0.1:8088** in your browser (WSL2 forwards ports to Windows localhost).
+
+**Full game stack QA:**
+
+```powershell
+# Set DUNE_QA_FUNCOM_TOKEN in .env (required for up / wait-ready)
+.\scripts\qa-console.ps1 up
+.\scripts\qa-console.ps1 check
+.\scripts\qa-console.ps1 wait-ready   # optional; can take hours on first install
+.\scripts\qa-console.ps1 down
+.\scripts\qa-console.ps1 down --all
+```
+
+Optional environment variables:
+
+```powershell
+# WSL distro name (default Ubuntu)
+# $env:DUNE_WSL_DISTRO = "Ubuntu"
+# Re-run apt/node/container provisioning
+# $env:DUNE_WSL_REPROVISION = "1"
+```
+
+Do **not** run `node scripts/qa-console.mjs` directly from Windows PowerShell — use the `.ps1` wrappers.
+
+**Manual test checklist (Windows):** fresh Ubuntu WSL → `.\install.ps1` → panel at `:8088` → `.\scripts\qa-console.ps1 check` → `.\scripts\qa-console.ps1 up` with token in `.env`.
+
 ### Optional Traefik (HTTPS)
 
 Default installs expose the Web UI on host port `8088`. To route through external Traefik with Let's Encrypt instead:
@@ -104,7 +142,7 @@ If `docker-compose.monitoring.yml` exists and `GRAFANA_ADMIN_PASSWORD` is set, `
 
 ### Development and local QA
 
-Production installs via `install.sh` (or `docker compose -f docker-compose.web.yml up -d --build`) build the React UI inside Docker automatically. **You do not need Node or a manual `web-console/web/dist` build on the host for production.**
+Production installs via `install.sh` on Linux or `install.ps1` on Windows (WSL2 delegation) build the React UI inside Docker automatically. **You do not need a manual `web-console/web/dist` build on the host for production.**
 
 The browser admin panel lives in [`web-console/`](web-console/) (`api/` for the Node backend, `web/` for the React UI). Production builds use [`web-console/Dockerfile`](web-console/Dockerfile). For containerized Vite HMR, [`web-console/web/Dockerfile`](web-console/web/Dockerfile) provides `development` and `builder` targets.
 
@@ -136,16 +174,16 @@ docker build -f web-console/web/Dockerfile --target builder ./web-console/web
 
 **End-to-end production QA (full stack + admin panel):**
 
-One command bootstraps missing setup (non-destructively), starts the real Dune stack, builds the production console image, and **only succeeds when the admin panel and core services are live**. Use this to test API methods against real postgres, Docker, and `dune` scripts—not mock mode.
+One command bootstraps missing setup (non-destructively), starts the real Dune stack, builds the production console image, and **only succeeds when the admin panel and core services are live**. Use this to test API methods against real postgres, Docker, and `dune` scripts—not mock mode. On Windows, PowerShell delegates into WSL2 where the same Node/bash scripts run as on Linux.
 
 ```powershell
-# Windows PowerShell (Podman Desktop, Docker Desktop, or WSL2)
-# Set DUNE_QA_FUNCOM_TOKEN in .env or the environment (required for up / wait-ready)
-node scripts/qa-console.mjs up
+# Windows — delegates into WSL2 (do not run node directly on the host)
+# Set DUNE_QA_FUNCOM_TOKEN in .env (required for up / wait-ready)
+.\scripts\qa-console.ps1 up
 # open http://127.0.0.1:8088
-node scripts/qa-console.mjs wait-ready              # optional: wait for game readiness (can take hours on first install)
-node scripts/qa-console.mjs down                      # stops console only
-node scripts/qa-console.mjs down --all              # stops console + Dune stack
+.\scripts\qa-console.ps1 wait-ready
+.\scripts\qa-console.ps1 down
+.\scripts\qa-console.ps1 down --all
 ```
 
 ```bash
@@ -166,7 +204,9 @@ node scripts/qa-console.mjs down --all              # stops console + Dune stack
 
 `up` and `wait-ready` require `DUNE_QA_FUNCOM_TOKEN` in `.env` or the environment (shell env var wins). If it is unset, the script exits immediately and does not touch Docker or local setup files.
 
-**Windows notes:** The game stack requires a Linux container host (Podman Machine or WSL2). Bash scripts run via WSL or Git Bash. Set `DUNE_QA_BASH` to your `bash.exe` if needed. The QA script sets `DUNE_CONTAINER_SOCKET` and `DUNE_HOST_REPO_ROOT` automatically for Podman/Docker.
+**Windows notes:** Use `.\install.ps1` and `.\scripts\qa-console.ps1` from PowerShell. They bootstrap WSL2 (Ubuntu), provision Linux dependencies once, and run all Node/bash/container work inside WSL. Set `DUNE_WSL_DISTRO` if your Ubuntu distro uses a different name. Do not run `node scripts/*.mjs` directly from the Windows host.
+
+**Linux/macOS notes:** Run `./scripts/qa-console.sh` or `node scripts/qa-console.mjs` directly. Inside an already-provisioned WSL session, you can also use `./scripts/qa-console.sh`.
 
 **Timeouts:** `QA_PANEL_TIMEOUT_MS` (default 120000), `QA_STACK_TIMEOUT_MS` (default 600000), `QA_READY_TIMEOUT_MS` (default 7200000).
 

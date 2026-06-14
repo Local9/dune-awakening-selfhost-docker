@@ -1,10 +1,8 @@
-# syntax=docker/dockerfile:1
-
 FROM node:24-bookworm-slim AS web-builder
 
 WORKDIR /app
 
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
 
 COPY web-console/web/package.json web-console/web/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
@@ -30,6 +28,7 @@ RUN apt-get update \
         netcat-openbsd \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable \
+    && corepack prepare pnpm@11.6.0 --activate \
     && arch="$(dpkg --print-architecture)" \
     && case "$arch" in \
         amd64) docker_arch="x86_64"; compose_arch="x86_64" ;; \

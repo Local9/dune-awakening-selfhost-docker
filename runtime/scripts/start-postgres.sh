@@ -37,7 +37,7 @@ docker network create dune-net 2>/dev/null || true
 
 docker rm -f dune-postgres 2>/dev/null || true
 
-docker volume create dune-postgres-data >/dev/null
+docker volume create dune-postgres-data >/dev/null 2>&1 || true
 
 docker run -d \
   --name dune-postgres \

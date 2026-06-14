@@ -5,28 +5,27 @@ cd "$(dirname "$0")/../.."
 
 mkdir -p runtime/secrets runtime/generated
 
-require_docker_prereqs() {
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker is required but was not found in PATH."
-    echo
-    echo "Use this command to install Docker Engine and Docker Compose:"
-    echo '  sudo apt-get update && sudo apt-get install -y ca-certificates curl && sudo install -m 0755 -d /etc/apt/keyrings && sudo curl -fsSL https://download.docker.com/linux/$(. /etc/os-release && echo "$ID")/gpg -o /etc/apt/keyrings/docker.asc && sudo chmod a+r /etc/apt/keyrings/docker.asc && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$(. /etc/os-release && echo "$ID") $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && sudo systemctl enable --now docker && docker --version && docker compose version'
-    echo
-    echo "Then run:"
-    echo "  dune init"
-    exit 1
-  fi
+# shellcheck source=python-env.sh
+source runtime/scripts/python-env.sh
 
-  if ! docker info >/dev/null 2>&1; then
-    echo "Docker is installed, but the Docker daemon is not reachable."
-    echo
-    echo "Make sure Docker is running and that your user can access it."
-    echo "Common fixes:"
-    echo "  sudo systemctl enable --now docker"
-    echo "  sudo usermod -aG docker \$USER"
-    echo "  newgrp docker"
-    exit 1
+# shellcheck source=container-cli.sh
+source runtime/scripts/container-cli.sh
+
+require_docker_prereqs() {
+  if container_cli_ensure; then
+    return 0
   fi
+  print_container_install_help
+  if is_linux && command -v apt-get >/dev/null 2>&1; then
+    echo
+    echo "Linux Docker Engine install:"
+    echo '  sudo apt-get update && sudo apt-get install -y ca-certificates curl && sudo install -m 0755 -d /etc/apt/keyrings && sudo curl -fsSL https://download.docker.com/linux/$(. /etc/os-release && echo "$ID")/gpg -o /etc/apt/keyrings/docker.asc && sudo chmod a+r /etc/apt/keyrings/docker.asc && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$(. /etc/os-release && echo "$ID") $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && sudo systemctl enable --now docker && docker --version && docker compose version'
+  fi
+  exit 1
+}
+
+is_linux() {
+  [ "$(uname -s 2>/dev/null || true)" = "Linux" ]
 }
 
 prompt_default() {
@@ -235,6 +234,7 @@ echo "Existing local config/state is backed up first, but players should treat t
 echo
 
 require_docker_prereqs
+require_python_prereqs
 if [ "${DUNE_INIT_ASSUME_YES:-0}" = "1" ]; then
   echo "Using saved Web UI setup values."
 

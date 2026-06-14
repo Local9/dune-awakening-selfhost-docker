@@ -1,52 +1,50 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { platform } from "node:os";
 import { resolve } from "node:path";
-import { REPO_ROOT } from "./container-runtime.mjs";
+import { REPO_ROOT, detectRuntime } from "./container-runtime.mjs";
 
-const GIT_BASH_PATHS = [
-  "C:\\Program Files\\Git\\bin\\bash.exe",
-  "C:\\Program Files (x86)\\Git\\bin\\bash.exe"
-];
+function pythonEnvScript(repoRoot) {
+  return resolve(repoRoot, "runtime/scripts/python-env.sh").replace(/\\/g, "/");
+}
 
-export function resolveBash() {
-  if (platform() !== "win32") {
-    return { mode: "native", bash: "bash" };
-  }
-  if (process.env.DUNE_QA_BASH) {
-    if (!existsSync(process.env.DUNE_QA_BASH)) {
-      throw new Error(`DUNE_QA_BASH is set but not found: ${process.env.DUNE_QA_BASH}`);
-    }
-    return { mode: "path", bash: process.env.DUNE_QA_BASH };
-  }
-  for (const path of GIT_BASH_PATHS) {
-    if (existsSync(path)) return { mode: "path", bash: path };
-  }
-  if (existsSync("C:\\Windows\\System32\\wsl.exe")) {
-    return { mode: "wsl", bash: "C:\\Windows\\System32\\wsl.exe" };
-  }
-  throw new Error(
-    "Bash is required to run Dune stack scripts on Windows. Install WSL2 or Git Bash, or set DUNE_QA_BASH to your bash.exe path."
-  );
+function shellQuote(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_./:-]+$/.test(text)) return text;
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function containerCliEnvScript(repoRoot) {
+  return resolve(repoRoot, "runtime/scripts/container-cli.sh").replace(/\\/g, "/");
+}
+
+function wrapWithPythonEnv(command, repoRoot) {
+  const pythonEnv = shellQuote(pythonEnvScript(repoRoot));
+  const containerCli = shellQuote(containerCliEnvScript(repoRoot));
+  return [
+    `source ${pythonEnv}`,
+    "{ python_env_ensure || { print_python_install_help; exit 1; }; }",
+    `source ${containerCli}`,
+    "{ container_cli_ensure || { print_container_install_help; exit 1; }; }",
+    command
+  ].join(" && ");
 }
 
 export function runBash(scriptRelPath, args = [], env = {}, repoRoot = REPO_ROOT) {
-  const bashInfo = resolveBash();
+  return runBashAsync(scriptRelPath, args, env, repoRoot);
+}
+
+async function runBashAsync(scriptRelPath, args = [], env = {}, repoRoot = REPO_ROOT) {
   const scriptPath = resolve(repoRoot, scriptRelPath).replace(/\\/g, "/");
-  const mergedEnv = { ...process.env, ...env };
-
-  if (bashInfo.mode === "wsl") {
-    const wslPath = scriptPath.replace(/^([A-Za-z]):/, (_, drive) => `/mnt/${drive.toLowerCase()}`);
-    const wslRepo = repoRoot.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, drive) => `/mnt/${drive.toLowerCase()}`);
-    const command = `cd '${wslRepo}' && '${wslPath}' ${args.map(shellQuote).join(" ")}`;
-    return spawnTracked(bashInfo.bash, ["-e", "bash", "-lc", command], mergedEnv, repoRoot);
-  }
-
-  if (bashInfo.mode === "path") {
-    return spawnTracked(bashInfo.bash, [scriptPath, ...args], mergedEnv, repoRoot);
-  }
-
-  return spawnTracked(bashInfo.bash, [scriptPath, ...args], mergedEnv, repoRoot);
+  const runtime = await detectRuntime(repoRoot, { ...process.env, ...env });
+  const mergedEnv = {
+    ...process.env,
+    ...env,
+    DUNE_HOST_REPO_ROOT: runtime.hostRepoRoot,
+    DUNE_CONTAINER_SOCKET: runtime.socket,
+    DUNE_CONTAINER_CLI: runtime.executable
+  };
+  const quotedArgs = args.map(shellQuote).join(" ");
+  const command = wrapWithPythonEnv(`'${scriptPath.replace(/'/g, `'\\''`)}' ${quotedArgs}`, repoRoot);
+  return spawnTracked("bash", ["-lc", command], mergedEnv, repoRoot);
 }
 
 function spawnTracked(command, args, env, cwd) {
@@ -76,10 +74,4 @@ function spawnTracked(command, args, env, cwd) {
       else rejectPromise(Object.assign(new Error(`${command} failed with exit ${code}`), result));
     });
   });
-}
-
-function shellQuote(value) {
-  const text = String(value);
-  if (/^[A-Za-z0-9_./:-]+$/.test(text)) return text;
-  return `'${text.replace(/'/g, `'\\''`)}'`;
 }

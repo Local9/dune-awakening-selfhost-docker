@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# shellcheck source=container-cli.sh
+source "$(dirname "${BASH_SOURCE[0]}")/container-cli.sh"
+container_cli_ensure || true
+
 # Convert repository paths used inside RedBlink Dune Docker Console (/repo) to the
 # real host path that the Docker daemon needs for bind mounts. Host CLI runs
 # keep using $PWD unchanged.

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.6.0",
   "description": "Safe web API for RedBlink Dune Awakening Docker control",
   "scripts": {
     "dev": "node --watch src/server.js",

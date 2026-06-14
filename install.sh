@@ -267,7 +267,14 @@ say "Starting Dune Docker Console Installer."
 
 if ! is_linux; then
   echo "This automatic installer runs on Linux servers."
-  echo "For Docker Desktop on Windows or another VM setup, start Docker Desktop first, then start the Web UI from the extracted release folder."
+  if [ -f "$(dirname "$0")/install.ps1" ]; then
+    echo
+    echo "On Windows, use Podman Desktop or Docker Desktop, then run:"
+    echo "  .\\install.ps1"
+    echo "  (PowerShell bootstraps WSL2 and runs Linux scripts inside Ubuntu.)"
+  else
+    echo "For Docker Desktop on Windows or another VM setup, start Docker Desktop first, then start the Web UI from the extracted release folder."
+  fi
   exit 1
 fi
 

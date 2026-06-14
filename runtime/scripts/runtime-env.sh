@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=python-env.sh
+source "$(dirname "${BASH_SOURCE[0]}")/python-env.sh"
+python_env_ensure || true
+
+# shellcheck source=container-cli.sh
+source "$(dirname "${BASH_SOURCE[0]}")/container-cli.sh"
+container_cli_ensure || true
+
 value_is_known() {
   local value="${1:-}"
   [ -n "$value" ] && [ "$value" != "unknown" ]
